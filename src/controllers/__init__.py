@@ -1,2 +1,3 @@
 from controllers.sample_entity_controller import SampleEntityController
 from controllers.customer_controller import CustomerController
+from controllers.auth_controller import AuthController

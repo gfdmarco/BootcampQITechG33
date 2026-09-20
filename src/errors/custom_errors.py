@@ -121,3 +121,20 @@ class NotFoundCustomer(QIException):
         description = f"Customer with key {customer_key} was not found."
         translation = f"O cliente com chave {customer_key} não foi encontrado."
         super().__init__(title, self.code, http_status, description, translation)
+
+
+class InvalidCredentials(QIException):
+    """Credenciais inválidas — CPF não encontrado ou senha errada.
+
+    Propositalmente genérica: nunca dizemos se foi o CPF ou a senha
+    que falhou. Dizer qual dos dois erra ajuda quem está tentando
+    adivinhar — e num banco isso não é opção.
+    """
+    code = "QIT002001"
+
+    def __init__(self) -> None:
+        title = "Invalid Credentials"
+        http_status = 401
+        description = "The provided credentials are invalid."
+        translation = "CPF ou senha inválidos."
+        super().__init__(title, self.code, http_status, description, translation)

@@ -63,3 +63,37 @@ class RequestGenerator:
         )
 
         return response.response_status, response.response_json
+
+    @staticmethod
+    def GET_customer(customer_key: str, access_token: str = None) -> BaseConnectorResponse:
+        headers = {"INTERNAL-TOKEN": INTERNAL_TOKEN}
+        if access_token:
+            headers["Authorization"] = f"Bearer {access_token}"
+
+        response = ClientRequisition.send(
+            "GET",
+            f"/customers/{customer_key}",
+            headers=headers,
+        )
+        return response.response_status, response.response_json
+
+    @staticmethod
+    def POST_auth_login(payload: dict) -> BaseConnectorResponse:
+        response = ClientRequisition.send(
+            "POST",
+            "/auth/login",
+            payload=payload,
+            headers={"INTERNAL-TOKEN": INTERNAL_TOKEN},
+        )
+        return response.response_status, response.response_json
+
+    @staticmethod
+    def POST_auth_refresh(payload: dict) -> BaseConnectorResponse:
+        response = ClientRequisition.send(
+            "POST",
+            "/auth/refresh",
+            payload=payload,
+            headers={"INTERNAL-TOKEN": INTERNAL_TOKEN},
+        )
+        return response.response_status, response.response_json
+

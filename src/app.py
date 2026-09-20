@@ -8,6 +8,7 @@ from middlewares import (
     register_request_context_middleware,
     register_request_logger_middleware,
     register_session_manager_middleware,
+    register_jwt_middleware,
 )
 from resources import HealthCheckResource, SampleEntityResource, CustomerResource
 from utils.logger import setup_logging
@@ -101,6 +102,7 @@ def create_app() -> FastAPI:
     # a aplicação de dentro pra fora, então o ÚLTIMO registrado é o
     # PRIMEIRO a executar. Leia de baixo pra cima e o diagrama volta.
     register_session_manager_middleware(application)
+    register_jwt_middleware(application)
     register_internal_token_middleware(application)
     register_request_logger_middleware(application)
     register_request_context_middleware(application)
@@ -142,6 +144,19 @@ def create_app() -> FastAPI:
         "/customers/{customer_key}",
         customer_resource.on_get_by_key,
         methods=["GET"],
+    )
+
+    from resources.auth import AuthResource
+    auth_resource = AuthResource()
+    application.add_api_route(
+        "/auth/login",
+        auth_resource.on_post_login,
+        methods=["POST"],
+    )
+    application.add_api_route(
+        "/auth/refresh",
+        auth_resource.on_post_refresh,
+        methods=["POST"],
     )
 
     application.add_api_route(
