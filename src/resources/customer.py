@@ -75,7 +75,6 @@ class CustomerResource:
         
         controller.delete(customer_key, token_customer_key)
 
-        # 204 No Content é o padrão para deleções de sucesso
         return JSONResponse(
             content=None,
             status_code=status.HTTP_204_NO_CONTENT,

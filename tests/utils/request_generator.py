@@ -124,6 +124,20 @@ class RequestGenerator:
         return response.response_status, response.response_json
 
     @staticmethod
+    def POST_customer_account(customer_key: str, payload: dict, access_token: str = None) -> BaseConnectorResponse:
+        headers = {"INTERNAL-TOKEN": INTERNAL_TOKEN}
+        if access_token:
+            headers["Authorization"] = f"Bearer {access_token}"
+
+        response = ClientRequisition.send(
+            "POST",
+            f"/customers/{customer_key}/accounts",
+            payload=payload,
+            headers=headers,
+        )
+        return response.response_status, response.response_json
+
+    @staticmethod
     def POST_auth_login(payload: dict) -> BaseConnectorResponse:
         response = ClientRequisition.send(
             "POST",
