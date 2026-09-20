@@ -1,6 +1,10 @@
 from errors import QIException
 
 
+# ──────────────────────────────────────────────────────────────────────────────
+# QIT001xxx — Domínio de Negócio (Cadastro, Regras de Cliente e Conta)
+# ──────────────────────────────────────────────────────────────────────────────
+
 class NotFoundSampleEntity(QIException):
     code = "QIT001001"
 
@@ -94,6 +98,7 @@ class UnderageCustomer(QIException):
 
 
 class InvalidDate(QIException):
+class InvalidBirthdate(QIException):
     """A data tem o formato certo e não existe no calendário.
 
     Existe porque o `pattern` do schema sabe contar dígitos, não dias:
@@ -132,3 +137,112 @@ class NotFoundAccount(QIException):
         translation = f"A entidade com chave {account_key} não foi encontrada."
         super().__init__(title, self.code, http_status, description, translation)
 
+
+class UnderageCustomer(QIException):
+    code = "QIT001008"
+
+    def __init__(self, age, minimum_age) -> None:
+        title = "Customer is underage"
+        http_status = 422
+        description = f"The customer is {age} years old, and the minimum is {minimum_age}."
+        translation = f"Para abrir uma conta é preciso ter pelo menos {minimum_age} anos."
+        super().__init__(title, self.code, http_status, description, translation)
+
+
+class NotFoundCustomer(QIException):
+    code = "QIT001009"
+
+    def __init__(self, customer_key) -> None:
+        title = "Customer not Found"
+        http_status = 404
+        description = f"Customer with key {customer_key} was not found."
+        translation = f"O cliente com chave {customer_key} não foi encontrado."
+        super().__init__(title, self.code, http_status, description, translation)
+
+
+class CustomerAccountLimitReached(QIException):
+    code = "QIT001010"
+
+    def __init__(self) -> None:
+        title = "Account Limit Reached"
+        http_status = 422
+        description = "The customer has reached the maximum number of active accounts (3)."
+        translation = "O cliente atingiu o limite máximo de contas ativas permitidas (3)."
+        super().__init__(title, self.code, http_status, description, translation)
+
+
+class InsufficientBalance(QIException):
+    """O cliente tentou transferir um valor superior ao saldo disponível na conta.
+
+    Retorna 422 pois o formato está correto, mas a regra de negócio proíbe.
+    """
+
+    code = "QIT001011"
+
+    def __init__(self) -> None:
+        title = "Insufficient Balance"
+        http_status = 422
+        description = "The origin account does not have enough balance to complete the transaction."
+        translation = "Saldo insuficiente para realizar a transferência."
+        super().__init__(title, self.code, http_status, description, translation)
+
+
+class InvalidTransactionType(QIException):
+    """O tipo de transação enviado não é reconhecido pelo sistema."""
+
+    code = "QIT001012"
+
+    def __init__(self, transaction_type) -> None:
+        title = "Invalid Transaction Type"
+        http_status = 422
+        description = f"The transaction type '{transaction_type}' is not supported."
+        translation = "O tipo de transação informado não é suportado pelo sistema."
+        super().__init__(title, self.code, http_status, description, translation)
+
+
+# ──────────────────────────────────────────────────────────────────────────────
+# QIT002xxx — Domínio de Segurança (Autenticação e Autorização)
+# ──────────────────────────────────────────────────────────────────────────────
+
+class InvalidCredentials(QIException):
+    """Credenciais inválidas — CPF não encontrado ou senha errada.
+
+    Propositalmente genérica: nunca dizemos se foi o CPF ou a senha
+    que falhou. Dizer qual dos dois erra ajuda quem está tentando
+    adivinhar — e num banco isso não é opção.
+    """
+
+    code = "QIT002001"
+
+    def __init__(self) -> None:
+        title = "Invalid Credentials"
+        http_status = 401
+        description = "The provided credentials are invalid."
+        translation = "CPF ou senha inválidos."
+        super().__init__(title, self.code, http_status, description, translation)
+
+
+class UnauthorizedToken(QIException):
+    """Token JWT ausente, expirado ou com assinatura inválida."""
+
+    code = "QIT002002"
+
+    def __init__(self, detail: str = "Invalid or expired token.") -> None:
+        title = "Unauthorized"
+        http_status = 401
+        description = detail
+        translation = "Token de acesso inválido ou expirado."
+        super().__init__(title, self.code, http_status, description, translation)
+
+
+class ForbiddenAction(QIException):
+    """Cliente tentando agir em nome de outro cliente."""
+
+    code = "QIT002003"
+
+    def __init__(self) -> None:
+        title = "Forbidden Action"
+        http_status = 403
+        description = "You do not have permission to access or modify this resource."
+        translation = "Você não tem permissão para acessar ou modificar este recurso."
+        super().__init__(title, self.code, http_status, description, translation)

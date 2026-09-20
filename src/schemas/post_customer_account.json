@@ -1,0 +1,14 @@
+{
+    "title": "PostCustomerAccount",
+    "type": "object",
+    "properties": {
+        "type": {
+            "type": "string",
+            "enum": ["checking", "savings"]
+        }
+    },
+    "required": [
+        "type"
+    ],
+    "additionalProperties": false
+}
