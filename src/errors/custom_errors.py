@@ -82,6 +82,17 @@ class UnderageSampleEntity(QIException):
         super().__init__(title, self.code, http_status, description, translation)
 
 
+class UnderageCustomer(QIException):
+    code = "QIT001008"
+
+    def __init__(self, age, minimum_age) -> None:
+        title = "Customer is underage"
+        http_status = 422
+        description = f"The customer is {age} years old, and the minimum is {minimum_age}."
+        translation = f"Para abrir uma conta é preciso ter pelo menos {minimum_age} anos."
+        super().__init__(title, self.code, http_status, description, translation)
+
+
 class InvalidBirthdate(QIException):
     """A data tem o formato certo e não existe no calendário.
 
