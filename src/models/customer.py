@@ -1,7 +1,6 @@
 from sqlalchemy import CHAR, Column, Date, DateTime, ForeignKey, Integer, String, UniqueConstraint, func
 from sqlalchemy.orm import relationship
 from models.base import Base
-from models import CustomerStatus
 
 
 class Customer(Base):
@@ -14,7 +13,7 @@ class Customer(Base):
     email = Column(String(255), nullable=False)
     password_hash = Column(String(255), nullable=False)
     birth_date = Column(Date, nullable=False)
-    status_id = Column(Integer, ForeignKey(CustomerStatus.id), nullable=False)
+    status_id = Column(Integer, ForeignKey("customer_status.id"), nullable=False)
     created_at = Column(DateTime, nullable=False, server_default=func.now())
     updated_at = Column(DateTime, nullable=False, server_default=func.now(), onupdate=func.now())
 
@@ -25,7 +24,9 @@ class Customer(Base):
     )
 
     status = relationship("CustomerStatus", foreign_keys=[status_id], lazy="selectin")
+
     status_events = relationship(
-        "CustomerStatusEvent", back_populates="customer",
+        "CustomerStatusEvent",
+        back_populates="customer",
         order_by="asc(CustomerStatusEvent.created_at)",
     )
