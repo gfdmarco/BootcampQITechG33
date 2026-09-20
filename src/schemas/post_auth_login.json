@@ -1,0 +1,19 @@
+{
+    "title": "PostAuthLogin",
+    "type": "object",
+    "properties": {
+        "document_number": {
+            "type": "string",
+            "pattern": "^\\d{3}\\.\\d{3}\\.\\d{3}-\\d{2}$"
+        },
+        "password": {
+            "type": "string",
+            "minLength": 1
+        }
+    },
+    "required": [
+        "document_number",
+        "password"
+    ],
+    "additionalProperties": false
+}
