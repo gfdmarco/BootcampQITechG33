@@ -2,7 +2,7 @@ from fastapi import status
 from fastapi.encoders import jsonable_encoder
 from fastapi.responses import JSONResponse
 
-from controllers.customer_controller import CustomerController
+from controllers import CustomerController
 from utils.schema_handler import SchemaHandler
 
 

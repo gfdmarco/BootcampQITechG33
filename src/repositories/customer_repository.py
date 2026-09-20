@@ -6,16 +6,25 @@ from models import Customer, CustomerStatus, CustomerStatusEvent
 
 
 class CustomerRepository:
+    """A camada que fala com o banco. Só aqui existe query.
+
+    Nenhuma regra de negócio mora aqui: esta classe busca, guarda e
+    atualiza — quem decide o que fazer com isso é o controller.
+
+    É assim nos serviços da QI, e a linha é a mesma lá e aqui:
+    `self.session = context.db_session`.
+    """
+
     def __init__(self, context: Context) -> None:
         self.session = context.db_session
 
-    def create(self, customer_data: dict, password_hash: str) -> Customer:
+    def create(self, customer_data: dict, password_hash: str, birth_date: date) -> Customer:
         customer = Customer()
 
         customer.name = customer_data["name"]
         customer.email = customer_data["email"]
         customer.document_number = customer_data["document_number"]
-        customer.birth_date = date.fromisoformat(customer_data["birthdate"])
+        customer.birth_date = birth_date
         customer.password_hash = password_hash
         customer.customer_key = str(uuid4())
         customer.status_id = self.get_status(CustomerStatus.CREATED).id
@@ -25,12 +34,12 @@ class CustomerRepository:
 
     def update_status(self, customer: Customer, new_status_enumerator: str, reason: str = None) -> None:
         new_status = self.get_status(new_status_enumerator)
-        
+
         new_status_event = CustomerStatusEvent()
         new_status_event.from_status_id = customer.status_id
         new_status_event.to_status_id = new_status.id
         new_status_event.reason = reason
-        
+
         customer.status_id = new_status.id
         customer.status_events.append(new_status_event)
 
