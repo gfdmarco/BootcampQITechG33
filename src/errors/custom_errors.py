@@ -111,6 +111,32 @@ class InvalidBirthdate(QIException):
         translation = "A data de nascimento informada não existe."
         super().__init__(title, self.code, http_status, description, translation)
 
+class InsufficientBalance(QIException):
+    """
+    O cliente tentou transferir um valor superior ao saldo disponível na conta.
+    Retorna 422 pois o formato está correto, mas a regra de negócio proíbe.
+    """
+    code = "QIT001009"
+
+    def __init__(self) -> None:
+        title = "Insufficient Balance"
+        http_status = 422
+        description = "The origin account does not have enough balance to complete the transaction."
+        translation = "Saldo insuficiente para realizar a transferência."
+        super().__init__(title, self.code, http_status, description, translation)
+
+
+class InvalidTransactionType(QIException):
+    """
+    O tipo de transação enviado não é reconhecido pelo sistema.
+    """
+    code = "QIT001010"
+
+    def __init__(self, transaction_type) -> None:
+        title = "Invalid Transaction Type"
+        http_status = 422
+        description = f"The transaction type '{transaction_type}' is not supported."
+        translation = "O tipo de transação informado não é suportado pelo sistema."
 
 class NotFoundCustomer(QIException):
     code = "QIT001009"
