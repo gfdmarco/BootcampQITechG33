@@ -1,4 +1,4 @@
-from fastapi import status
+from fastapi import Request, status
 from fastapi.encoders import jsonable_encoder
 from fastapi.responses import JSONResponse
 
@@ -26,3 +26,16 @@ class AuthResource:
             content=jsonable_encoder(token_data),
             status_code=status.HTTP_200_OK,
         )
+
+    @SchemaHandler.validate("put_auth_password.json")
+    def on_put_password(self, payload: dict, request: Request) -> JSONResponse:
+        controller = AuthController()
+        token_customer_key = request.state.customer_key
+        
+        controller.update_password(payload, token_customer_key)
+
+        return JSONResponse(
+            content=jsonable_encoder({"message": "Password successfully updated."}),
+            status_code=status.HTTP_200_OK,
+        )
+

@@ -10,6 +10,7 @@ from errors import (
     InvalidBirthdate,
     UnderageCustomer,
     NotFoundCustomer,
+    ForbiddenAction,
 )
 from models import CustomerStatus
 from repositories import CustomerRepository
@@ -71,6 +72,32 @@ class CustomerController(BaseController):
         if customer is None:
             raise NotFoundCustomer(customer_key)
 
+        return CustomerDTO.obj_to_dict(customer)
+
+    def update(self, customer_key: str, payload: dict, token_customer_key: str) -> dict:
+        self.logger.debug(f"Atualizando o customer de chave {customer_key}")
+
+        # Regra de ouro da segurança: o cliente só pode alterar a si mesmo.
+        if customer_key != token_customer_key:
+            raise ForbiddenAction()
+
+        customer = self.customer_repository.get_by_key(customer_key)
+        if customer is None:
+            raise NotFoundCustomer(customer_key)
+
+        if "name" in payload:
+            customer.name = payload["name"]
+
+        if "email" in payload:
+            new_email = payload["email"]
+            # Precisamos checar se o novo e-mail não pertence a OUTRO cliente.
+            existing = self.customer_repository.get_by_email(new_email)
+            if existing and existing.customer_key != customer_key:
+                raise DuplicatedEmail(new_email)
+            
+            customer.email = new_email
+
+        self.session.commit()
         return CustomerDTO.obj_to_dict(customer)
 
     def _parse_birthdate(self, raw_birthdate: str) -> date:

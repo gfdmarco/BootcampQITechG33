@@ -138,3 +138,15 @@ class InvalidCredentials(QIException):
         description = "The provided credentials are invalid."
         translation = "CPF ou senha inválidos."
         super().__init__(title, self.code, http_status, description, translation)
+
+
+class ForbiddenAction(QIException):
+    """Cliente tentando agir em nome de outro cliente."""
+    code = "QIT002003"
+
+    def __init__(self) -> None:
+        title = "Forbidden Action"
+        http_status = 403
+        description = "You do not have permission to access or modify this resource."
+        translation = "Você não tem permissão para acessar ou modificar este recurso."
+        super().__init__(title, self.code, http_status, description, translation)

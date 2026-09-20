@@ -71,3 +71,25 @@ class AuthController(BaseController):
             "access_token": new_access_token,
             "token_type": "Bearer"
         }
+
+    def update_password(self, payload: dict, token_customer_key: str) -> None:
+        self.logger.debug(f"Atualizando senha do cliente {token_customer_key}")
+
+        customer = self.customer_repository.get_by_key(token_customer_key)
+        
+        # O token validou o cliente, mas ele pode ter sido deletado nesse milissegundo
+        if customer is None:
+            from errors.custom_errors import NotFoundCustomer
+            raise NotFoundCustomer(token_customer_key)
+
+        current_password = payload["current_password"]
+        new_password = payload["new_password"]
+
+        # Se a senha atual não bater, levantamos credenciais inválidas (401)
+        if not bcrypt.verify(current_password, customer.password_hash):
+            raise InvalidCredentials()
+
+        # Atualizamos a senha com um novo hash bancário
+        customer.password_hash = bcrypt.hash(new_password)
+        self.session.commit()
+
