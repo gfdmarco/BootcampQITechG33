@@ -36,7 +36,7 @@ CREATE TABLE account_status (
     created_at  TIMESTAMP NOT NULL DEFAULT NOW(),
     UNIQUE(enumerator)
 );
-INSERT INTO account_status (enumerator) VALUES ('created'), ('active'), ('blocked'), ('closed');
+INSERT INTO account_status (enumerator) VALUES ('created'), ('pending'), ('failed'), ('success');
 
 CREATE TABLE account (
     id          SERIAL PRIMARY KEY,
