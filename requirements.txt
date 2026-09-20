@@ -20,3 +20,4 @@ psycopg2-binary==2.9.10
 # externa fica solta no meio do codigo.
 requests==2.32.3
 passlib[bcrypt]==1.7.4
+PyJWT==2.8.0
