@@ -51,16 +51,14 @@ class AuthController(BaseController):
         try:
             token_data = decode_token(refresh_token, expected_type="refresh")
         except jwt.PyJWTError:
-            # Se o refresh token for inválido, pedimos login de novo
-            from middlewares.jwt_auth import UnauthorizedToken
+            from errors.custom_errors import UnauthorizedToken
             raise UnauthorizedToken("Invalid or expired refresh token.")
 
         customer_key = token_data.get("sub")
         customer = self.customer_repository.get_by_key(customer_key)
 
-        # Entre um refresh e outro, o cliente pode ter sido deletado ou bloqueado
         if customer is None or customer.status.enumerator == CustomerStatus.FAILED:
-            from middlewares.jwt_auth import UnauthorizedToken
+            from errors.custom_errors import UnauthorizedToken
             raise UnauthorizedToken("Customer no longer active.")
 
         new_access_token = create_access_token(customer.customer_key)
