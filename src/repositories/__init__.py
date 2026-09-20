@@ -1,1 +1,5 @@
 from repositories.sample_entity_repository import SampleEntityRepository
+
+from repositories.customer_repository import CustomerRepository
+from repositories.account_repository import AccountRepository
+from repositories.transaction_repository import TransactionRepository
