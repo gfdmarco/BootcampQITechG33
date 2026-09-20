@@ -93,7 +93,7 @@ class UnderageCustomer(QIException):
         super().__init__(title, self.code, http_status, description, translation)
 
 
-class InvalidBirthdate(QIException):
+class InvalidDate(QIException):
     """A data tem o formato certo e não existe no calendário.
 
     Existe porque o `pattern` do schema sabe contar dígitos, não dias:
@@ -104,9 +104,31 @@ class InvalidBirthdate(QIException):
 
     code = "QIT001007"
 
-    def __init__(self, birthdate) -> None:
-        title = "Invalid Birthdate"
+    def __init__(self, date) -> None:
+        title = "Invalid Date"
         http_status = 422
-        description = f"The birthdate {birthdate} is not a real date."
+        description = f"The Date {date} is not a real date."
         translation = "A data de nascimento informada não existe."
         super().__init__(title, self.code, http_status, description, translation)
+
+class DuplicatedAccount(QIException):
+
+    code = "QIT001010"
+
+    def __init__(self, branch, number) -> None:
+        title = "Duplicated Account"
+        http_status = 422
+        description = f"The branch {branch} and the number {number} already respond to an existing account."
+        translation = "A agência e conta informadas já correspondem a uma conta existente"
+        super().__init__(title, self.code, http_status, description, translation)
+
+class NotFoundAccount(QIException):
+    code = "QIT001011"
+
+    def __init__(self, account_key) -> None:
+        title = "Entity not Found"
+        http_status = 404
+        description = f"Entity with key {account_key} was not found."
+        translation = f"A entidade com chave {account_key} não foi encontrada."
+        super().__init__(title, self.code, http_status, description, translation)
+
