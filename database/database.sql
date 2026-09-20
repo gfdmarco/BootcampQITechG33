@@ -4,7 +4,7 @@ CREATE TABLE customer_status (
     created_at  TIMESTAMP NOT NULL DEFAULT NOW(),
     UNIQUE(enumerator)
 );
-INSERT INTO customer_status (enumerator) VALUES ('created'), ('active'), ('inactive'), ('banned');
+INSERT INTO customer_status (enumerator) VALUES ('created'), ('pending'), ('success'), ('failed');
 
 CREATE TABLE customer (
     id              SERIAL PRIMARY KEY,
