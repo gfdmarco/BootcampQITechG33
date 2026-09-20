@@ -1,0 +1,12 @@
+{
+  "title": "PutAccounts",
+  "type": "object",
+  "properties": {
+    "status": {
+      "type": "string",
+      "enum": ["active", "blocked", "closed"]
+    }
+  },
+  "required": ["status"],
+  "additionalProperties": false
+}

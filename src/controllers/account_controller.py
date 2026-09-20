@@ -15,12 +15,20 @@ from errors import (
     ForbiddenAction,
     NotFoundCustomer,
     CustomerAccountLimitReached,
-    NotFoundAccount
+    NotFoundAccount,
+    AccountInvalidStatusTransition,
+    AccountHasBalance
 )
 from models import Account, AccountStatus, Customer, CustomerStatus
 from repositories import AccountRepository, TransactionRepository, CustomerRepository
 
 MAX_ACCOUNTS_PER_CUSTOMER = 3
+
+ALLOWED_STATUS_TRANSITIONS = {
+    AccountStatus.ACTIVE: [AccountStatus.BLOCKED, AccountStatus.CLOSED],
+    AccountStatus.BLOCKED: [AccountStatus.ACTIVE, AccountStatus.CLOSED],
+    AccountStatus.CLOSED: [],
+}
 
 class AccountController(BaseController):
     """Regras de negócio em que as contas se baseiam"""
@@ -47,7 +55,7 @@ class AccountController(BaseController):
         self.account_repository.update_status(account, AccountStatus.ACTIVE)
 
         account_dto = AccountDTO.obj_to_dict(account)
-        
+
         return account_dto
 
     def get_balance(self, customer_key: str, account_key: str) -> int:
@@ -73,44 +81,22 @@ class AccountController(BaseController):
 
         return AccountDTO.obj_to_dict(account)
 
-    def finish_account(self, account_key: str) -> dict:
+    def update_status(self, account_key: str, new_status: str) -> dict:
         account = self.account_repository.get_by_key(account_key)
-        customer = account.customer
+        if account is None:
+            raise NotFoundAccount(account_key)
 
-        balance = self.get_balance(customer.customer_key, account_key)
-        if balance != 0 or account.status.enumerator != AccountStatus.ACTIVE:
-            raise SampleEntityFinalStatus(account.status.enumerator, new_status=AccountStatus.CLOSED)
+        old_status = account.status.enumerator
 
-        self.account_repository.update_status(account, AccountStatus.CLOSED)
+        if new_status not in ALLOWED_STATUS_TRANSITIONS.get(old_status, []):
+            raise AccountInvalidStatusTransition(old_status, new_status)
 
-        account_dto = AccountDTO.only_obj_key(account)
-        self.session.commit()
+        if new_status == AccountStatus.CLOSED and account.balance != 0:
+            raise AccountHasBalance(account_key, account.balance)
 
-        return account_dto
-    
-    def block_account(self, account_key: str) -> dict:
-        account = self.account_repository.get_by_key(account_key)
+        self.account_repository.update_status(account, new_status)
 
-        if account.status.enumerator != AccountStatus.ACTIVE:
-            raise SampleEntityFinalStatus(account.status.enumerator, AccountStatus.BLOCKED)
-
-        self.account_repository.update_status(account, AccountStatus.BLOCKED)
-
-        account_dto = AccountDTO.only_obj_key(account)
-        self.session.commit()
-
-        return account_dto
-
-    def unlock_account(self, account_key: str) -> dict:
-        # ainda precisamos pensar quando que podemos liberar o desbloqueamento
-        account = self.account_repository.get_by_key(account_key)
-
-        if account.status.enumerator != AccountStatus.BLOCKED:
-            raise SampleEntityFinalStatus(account.status.enumerator, AccountStatus.ACTIVE)
-
-        self.account_repository.update_status(account, AccountStatus.ACTIVE)
-
-        account_dto = AccountDTO.only_obj_key(account)
+        account_dto = AccountDTO.obj_to_dict(account)
         self.session.commit()
 
         return account_dto

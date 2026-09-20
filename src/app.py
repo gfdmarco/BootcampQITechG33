@@ -10,7 +10,7 @@ from middlewares import (
     register_session_manager_middleware,
     register_jwt_middleware,
 )
-from resources import HealthCheckResource, SampleEntityResource, CustomerResource
+from resources import HealthCheckResource, SampleEntityResource, CustomerResource, AccountResource
 from utils.logger import setup_logging
 
 
@@ -178,6 +178,37 @@ def create_app() -> FastAPI:
         auth_resource.on_put_password,
         methods=["PUT"],
     )
+
+    accounts_resource = AccountResource()
+
+    application.add_api_route(
+        "/accounts/{account_key}",
+        accounts_resource.on_get_by_key,
+        methods=["GET"],
+    )
+    application.add_api_route(
+        "/accounts/{account_key}/balance",
+        accounts_resource.on_get_balance,
+        methods=["GET"],
+    )
+    application.add_api_route(
+        "/accounts/{account_key}",
+        accounts_resource.on_put_by_key,
+        methods=["PUT"],
+    )
+    application.add_api_route(
+        "/accounts",
+        accounts_resource.on_get_list,
+        methods=["GET"],
+    )
+    application.add_api_route(
+        "/accounts/{account_key}/statement",
+        accounts_resource.on_get_statement,
+        methods=["GET"],
+    )
+
+
+
 
     application.add_api_route(
         "/sample_entity",
