@@ -1,0 +1,39 @@
+{
+    "title": "GetTransactions",
+    "type": "object",
+    "properties": {
+        "limit": {
+        "type": "string",
+        "pattern": "^(100|[1-9]?[0-9])$"
+        },
+        "page": {
+        "type": "string",
+        "pattern": "^[0-9]{1,9}$"
+        },
+        "origin_account_key": {
+        "type": "string",
+        "pattern": "^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$"
+        },
+        "destination_account_key": {
+        "type": "string",
+        "pattern": "^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$"
+        },
+        "type": {
+        "type": "string",
+        "enum": [
+            "deposit",
+            "transfer"
+        ]
+        },
+        "channel": {
+        "type": "string",
+        "enum": [
+            "pix",
+            "ted",
+            "card",
+            "international"
+        ]
+        }
+    },
+    "additionalProperties": false
+}
