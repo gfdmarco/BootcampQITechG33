@@ -52,3 +52,14 @@ class RequestGenerator:
             "GET", "/sample_entities", headers={"INTERNAL-TOKEN": INTERNAL_TOKEN}, query_params=params
         )
         return response.response_status, response.response_json
+
+    @staticmethod
+    def POST_customer(customer_payload: dict) -> BaseConnectorResponse:
+        response = ClientRequisition.send(
+            "POST",
+            "/customers",
+            payload=customer_payload,
+            headers={"INTERNAL-TOKEN": INTERNAL_TOKEN},
+        )
+
+        return response.response_status, response.response_json
