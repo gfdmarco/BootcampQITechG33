@@ -9,6 +9,7 @@ from errors import(
 
     InsufficientBalance,
     InvalidTransactionType,
+    ForbiddenAction,
 )
 
 
@@ -61,7 +62,7 @@ class TransactionController:
 
             # Valida se quem está logado é realmente o dono da conta de origem
             if origin_account.customer_id != authenticated_customer_id:
-                raise Exception("ForbiddenAccess")#exception pqra ser lançada
+                raise ForbiddenAction
 
             fee = self.fee_repo.get_by_type(payload["channel"])
             multiplier = float(fee.percentage) / 100.0
