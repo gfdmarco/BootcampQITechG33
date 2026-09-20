@@ -79,3 +79,15 @@ class CustomerResource:
             content=None,
             status_code=status.HTTP_204_NO_CONTENT,
         )
+
+    @SchemaHandler.validate("post_customer_account.json")
+    def on_post_account(self, customer_key: str, payload: dict, request: Request) -> JSONResponse:
+        controller = CustomerController() 
+        token_customer_key = request.state.customer_key
+
+        account = controller.open_account(customer_key, payload, token_customer_key)
+
+        return JSONResponse(
+                content=jsonable_encoder(account),
+                status_code=status.HTTP_204_NO_CONTENT,
+            )

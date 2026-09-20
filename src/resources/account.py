@@ -10,7 +10,7 @@ DEFAULT_LIMIT = 10
 DEFAULT_PAGE = 0
 
 
-class AccountsResource:
+class AccountResource:
     def on_get_by_key(self, account_key: str) -> JSONResponse:
         controller = AccountController()
         account = controller.get_by_key(account_key)

@@ -164,7 +164,7 @@ def create_app() -> FastAPI:
     account_resource = AccountResource()
     application.add_api_route(
         "/customers/{customer_key}/accounts",
-        account_resource.on_post_open_account,
+        customer_resource.on_post_account,
         methods=["POST"],
     )
 
