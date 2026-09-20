@@ -87,7 +87,7 @@ class UnderageSampleEntity(QIException):
 
 
 class UnderageCustomer(QIException):
-    code = "QIT001008"
+    code = "QIT001007"
 
     def __init__(self, age, minimum_age) -> None:
         title = "Customer is underage"
@@ -98,6 +98,16 @@ class UnderageCustomer(QIException):
 
 
 class InvalidDate(QIException):
+    code = "QIT001008"
+
+    def __init__(self, date) -> None:
+        title = "Invalid Date"
+        http_status = 422
+        description = f"The Date {date} is not a real date."
+        translation = "A data de nascimento informada não existe."
+        super().__init__(title, self.code, http_status, description, translation)
+
+
 class InvalidBirthdate(QIException):
     """A data tem o formato certo e não existe no calendário.
 
@@ -107,12 +117,12 @@ class InvalidBirthdate(QIException):
     a API culpando a si mesma por um erro de quem chamou.
     """
 
-    code = "QIT001007"
+    code = "QIT001009"
 
-    def __init__(self, date) -> None:
-        title = "Invalid Date"
+    def __init__(self, birthdate) -> None:
+        title = "Invalid Birthdate"
         http_status = 422
-        description = f"The Date {date} is not a real date."
+        description = f"The birthdate {birthdate} is not a real birthdate."
         translation = "A data de nascimento informada não existe."
         super().__init__(title, self.code, http_status, description, translation)
 
@@ -139,7 +149,7 @@ class NotFoundAccount(QIException):
 
 
 class UnderageCustomer(QIException):
-    code = "QIT001008"
+    code = "QIT001012"
 
     def __init__(self, age, minimum_age) -> None:
         title = "Customer is underage"
@@ -150,7 +160,7 @@ class UnderageCustomer(QIException):
 
 
 class NotFoundCustomer(QIException):
-    code = "QIT001009"
+    code = "QIT001013"
 
     def __init__(self, customer_key) -> None:
         title = "Customer not Found"
@@ -161,7 +171,7 @@ class NotFoundCustomer(QIException):
 
 
 class CustomerAccountLimitReached(QIException):
-    code = "QIT001010"
+    code = "QIT001014"
 
     def __init__(self) -> None:
         title = "Account Limit Reached"
@@ -177,7 +187,7 @@ class InsufficientBalance(QIException):
     Retorna 422 pois o formato está correto, mas a regra de negócio proíbe.
     """
 
-    code = "QIT001011"
+    code = "QIT001015"
 
     def __init__(self) -> None:
         title = "Insufficient Balance"
@@ -190,7 +200,7 @@ class InsufficientBalance(QIException):
 class InvalidTransactionType(QIException):
     """O tipo de transação enviado não é reconhecido pelo sistema."""
 
-    code = "QIT001012"
+    code = "QIT001016"
 
     def __init__(self, transaction_type) -> None:
         title = "Invalid Transaction Type"
