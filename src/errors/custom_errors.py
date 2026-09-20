@@ -149,6 +149,16 @@ class NotFoundCustomer(QIException):
         super().__init__(title, self.code, http_status, description, translation)
 
 
+class CustomerAccountLimitReached(QIException):
+    code = "QIT001010"
+
+    def __init__(self) -> None:
+        title = "Account Limit Reached"
+        http_status = 422
+        description = "The customer has reached the maximum number of active accounts (3)."
+        translation = "O cliente atingiu o limite máximo de contas ativas permitidas (3)."
+        super().__init__(title, self.code, http_status, description, translation)
+
 class InvalidCredentials(QIException):
     """Credenciais inválidas — CPF não encontrado ou senha errada.
 
