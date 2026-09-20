@@ -54,3 +54,26 @@ class CustomerRepository:
 
     def get_status(self, enumerator: str) -> CustomerStatus:
         return self.session.query(CustomerStatus).filter(CustomerStatus.enumerator == enumerator).one()
+
+    def list_page(self, limit: int, offset: int, filters: dict) -> list[Customer]:
+        query = self.session.query(Customer)
+
+        status_enumerators = filters.get("status_enumerators")
+        if status_enumerators:
+            query = query.join(Customer.status).filter(CustomerStatus.enumerator.in_(status_enumerators))
+
+        name = filters.get("name")
+        if name is not None:
+            query = query.filter(Customer.name.ilike(f"%{name}%"))
+
+        email = filters.get("email")
+        if email is not None:
+            query = query.filter(Customer.email == email)
+
+        document_number = filters.get("document_number")
+        if document_number is not None:
+            query = query.filter(Customer.document_number == document_number)
+    
+        query = query.order_by(Customer.created_at.desc(), Customer.id.desc())
+
+        return query.limit(limit + 1).offset(offset).all()

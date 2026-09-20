@@ -2,22 +2,9 @@ import jwt
 from fastapi import FastAPI, Request
 
 from constants import JWT_PUBLIC_ENDPOINTS
-from errors.base_error import QIException
+from errors.custom_errors import UnauthorizedToken
 from errors.handlers import qi_exception_to_response
 from utils.jwt_handler import decode_token
-
-
-class UnauthorizedToken(QIException):
-    code = "QIT002002"
-
-    def __init__(self, description="Invalid or expired token."):
-        super().__init__(
-            title="Unauthorized",
-            code=self.code,
-            http_status=401,
-            description=description,
-            translation="Token inválido ou expirado. Faça login novamente.",
-        )
 
 
 def register_jwt_middleware(application: FastAPI) -> None:
@@ -52,11 +39,8 @@ def register_jwt_middleware(application: FastAPI) -> None:
         token = auth_header.split(" ")[1]
         try:
             payload = decode_token(token, expected_type="access")
-            
-            # TODO: Idealmente colocar o customer_key (sub) no request.state 
-            # ou num contextvar para que os controllers saibam quem é o usuário logado
             request.state.customer_key = payload.get("sub")
-            
+
         except jwt.ExpiredSignatureError:
             return qi_exception_to_response(UnauthorizedToken("Token has expired."))
         except jwt.PyJWTError:

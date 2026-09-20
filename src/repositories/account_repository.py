@@ -45,29 +45,11 @@ class AccountRepository:
 
     def get_by_balance(self, balance: str) -> Account:
         return self.session.query(Account).filter(Account.balance == balance).all()
-     
+
+    def count_by_customer(self, customer_id: int) -> int:
+        return self.session.query(Account).filter(Account.customer_id == customer_id).count()
+
     def list_page(self, limit: int, offset: int, filters: dict) -> list:
-        """A pagina, estreitada por quantos filtros vierem preenchidos.
-
-        Todo filtro segue a mesma forma: veio vazio, nao entra na query;
-        veio preenchido, vira mais um `.filter()`. Como cada um deles
-        acrescenta uma condicao a MESMA query, eles se somam com E — dois
-        filtros sempre devolvem menos linhas que um, nunca mais.
-
-        Repare que `ilike` e diferente de `==`: o nome casa por pedaco e
-        sem ligar pra maiuscula, enquanto e-mail e CPF exigem o valor
-        inteiro e exato. Essa diferenca e decisao de produto, nao detalhe
-        tecnico — quem procura uma pessoa lembra meio nome, mas quem
-        procura um CPF tem o CPF.
-
-        A ordenacao no fim nao e enfeite: `limit` e `offset` recortam
-        um conjunto, e um conjunto sem ordem pode voltar do banco em
-        qualquer sequencia. Sem o `order_by`, a pagina 2 tem permissao
-        de repetir uma linha da pagina 1 e sumir com outra. O desempate
-        por `id` existe porque duas entidades podem nascer no mesmo
-        instante — e ai `created_at` sozinho ainda deixaria a ordem em
-        aberto.
-        """
         query = self.session.query(Account)
 
         status_enumerators = filters.get("status_enumerators")
