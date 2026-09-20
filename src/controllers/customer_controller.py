@@ -74,6 +74,20 @@ class CustomerController(BaseController):
 
         return CustomerDTO.obj_to_dict(customer)
 
+    def get_list(self, limit: int, offset: int, filters: dict) -> dict:
+        self.logger.debug(f"Buscando lista de customers (limit={limit}, offset={offset})")
+        
+        customers = self.customer_repository.list_page(limit, offset, filters)
+
+        is_last_page = len(customers) <= limit
+        if not is_last_page:
+            customers.pop()
+
+        return {
+            "customers_list_dto": CustomerDTO.list_obj_to_list_dict(customers),
+            "is_last_page": is_last_page
+        }
+
     def update(self, customer_key: str, payload: dict, token_customer_key: str) -> dict:
         self.logger.debug(f"Atualizando o customer de chave {customer_key}")
 
@@ -99,6 +113,36 @@ class CustomerController(BaseController):
 
         self.session.commit()
         return CustomerDTO.obj_to_dict(customer)
+
+    def delete(self, customer_key: str, token_customer_key: str) -> None:
+        self.logger.debug(f"Encerrando (Deleção Lógica) o customer de chave {customer_key}")
+
+        if customer_key != token_customer_key:
+            raise ForbiddenAction()
+
+        customer = self.customer_repository.get_by_key(customer_key)
+        if customer is None:
+            raise NotFoundCustomer(customer_key)
+
+        # Se já estiver cancelado, somos idempotentes
+        if customer.status.enumerator == CustomerStatus.FAILED:
+            return
+
+        # Deleção lógica e auditoria
+        self.customer_repository.update_status(
+            customer, 
+            CustomerStatus.FAILED, 
+            reason="Customer requested account closure"
+        )
+
+        # Anonimização LGPD (O CPF é mantido por compliance/Risco de fraude)
+        customer.name = "DELETED_USER"
+        customer.email = f"deleted_{customer.customer_key}@closed.invalid"
+        
+        # Invalida a senha para impedir qualquer tentativa futura de login
+        customer.password_hash = "DELETED"
+
+        self.session.commit()
 
     def _parse_birthdate(self, raw_birthdate: str) -> date:
         """Converte a data, ou recusa com 422 em vez de 500.

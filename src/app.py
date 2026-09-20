@@ -141,6 +141,11 @@ def create_app() -> FastAPI:
         methods=["POST"],
     )
     application.add_api_route(
+        "/customers",
+        customer_resource.on_get_list,
+        methods=["GET"],
+    )
+    application.add_api_route(
         "/customers/{customer_key}",
         customer_resource.on_get_by_key,
         methods=["GET"],
@@ -149,6 +154,11 @@ def create_app() -> FastAPI:
         "/customers/{customer_key}",
         customer_resource.on_patch_by_key,
         methods=["PATCH"],
+    )
+    application.add_api_route(
+        "/customers/{customer_key}",
+        customer_resource.on_delete_by_key,
+        methods=["DELETE"],
     )
 
     from resources.auth import AuthResource
