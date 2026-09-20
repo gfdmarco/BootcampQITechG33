@@ -1,3 +1,7 @@
 from models.sample_entity_status import SampleEntityStatus
 from models.sample_entity import SampleEntity
 from models.sample_entity_status_event import SampleEntityStatusEvent
+from models.transaction import Transaction
+from models.transaction_status_event import TransactionStatusEvent
+from models.fee import Fee
+from models.transaction_status import TransactionStatus

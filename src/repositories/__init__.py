@@ -1,1 +1,5 @@
 from repositories.sample_entity_repository import SampleEntityRepository
+from repositories.fee_repository import FeeRepository
+from repositories.transaction_status_repository import TransactionStatusRepository
+from repositories.transaction_repository import TransactionRepository
+from repositories.transaction_status_event_repository import TransactionStatusEventRepository
