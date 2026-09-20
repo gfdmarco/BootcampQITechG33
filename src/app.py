@@ -10,7 +10,7 @@ from middlewares import (
     register_session_manager_middleware,
     register_jwt_middleware,
 )
-from resources import HealthCheckResource, SampleEntityResource, CustomerResource
+from resources import HealthCheckResource, SampleEntityResource, CustomerResource, AccountResource
 from utils.logger import setup_logging
 
 
@@ -159,6 +159,13 @@ def create_app() -> FastAPI:
         "/customers/{customer_key}",
         customer_resource.on_delete_by_key,
         methods=["DELETE"],
+    )
+
+    account_resource = AccountResource()
+    application.add_api_route(
+        "/customers/{customer_key}/accounts",
+        account_resource.on_post_open_account,
+        methods=["POST"],
     )
 
     from resources.auth import AuthResource

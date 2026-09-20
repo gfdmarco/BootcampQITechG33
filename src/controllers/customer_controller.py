@@ -64,6 +64,33 @@ class CustomerController(BaseController):
 
         return customer_dto
 
+    def open_account(self, customer_key: str, account_data: dict, token_customer_key: str) -> dict:
+        """Orquestra a abertura de conta.
+
+        Validações de DOMÍNIO do customer ficam aqui:
+        1. O customer_key da URL deve ser o mesmo do token (JWT).
+        2. O customer deve existir no banco.
+
+        A criação efetiva da conta é delegada ao AccountController.
+        """
+        self.logger.debug(f"Abrindo conta para o customer {customer_key}")
+
+        if customer_key != token_customer_key:
+            raise ForbiddenAction()
+
+        customer = self.customer_repository.get_by_key(customer_key)
+        if customer is None:
+            raise NotFoundCustomer(customer_key)
+
+        # Gera branch e number — são dados internos do banco
+        account_data["branch"] = "0001"
+        account_data["number"] = str(customer.id)
+
+        # Delega para o AccountController — ele valida limite e duplicidade
+        from controllers.account_controller import AccountController
+        account_controller = AccountController()
+        return account_controller.open_account(customer.id, account_data)
+
     def get_by_key(self, customer_key: str) -> dict:
         self.logger.debug(f"Buscando o customer de chave {customer_key}")
 
