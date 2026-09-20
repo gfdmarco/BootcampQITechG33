@@ -110,3 +110,14 @@ class InvalidBirthdate(QIException):
         description = f"The birthdate {birthdate} is not a real date."
         translation = "A data de nascimento informada não existe."
         super().__init__(title, self.code, http_status, description, translation)
+
+
+class NotFoundCustomer(QIException):
+    code = "QIT001009"
+
+    def __init__(self, customer_key) -> None:
+        title = "Customer not Found"
+        http_status = 404
+        description = f"Customer with key {customer_key} was not found."
+        translation = f"O cliente com chave {customer_key} não foi encontrado."
+        super().__init__(title, self.code, http_status, description, translation)

@@ -138,6 +138,11 @@ def create_app() -> FastAPI:
         customer_resource.on_post,
         methods=["POST"],
     )
+    application.add_api_route(
+        "/customers/{customer_key}",
+        customer_resource.on_get_by_key,
+        methods=["GET"],
+    )
 
     application.add_api_route(
         "/sample_entity",

@@ -9,6 +9,7 @@ from errors import (
     DuplicatedEmail,
     InvalidBirthdate,
     UnderageCustomer,
+    NotFoundCustomer,
 )
 from models import CustomerStatus
 from repositories import CustomerRepository
@@ -61,6 +62,16 @@ class CustomerController(BaseController):
         self.session.commit()
 
         return customer_dto
+
+    def get_by_key(self, customer_key: str) -> dict:
+        self.logger.debug(f"Buscando o customer de chave {customer_key}")
+
+        customer = self.customer_repository.get_by_key(customer_key)
+
+        if customer is None:
+            raise NotFoundCustomer(customer_key)
+
+        return CustomerDTO.obj_to_dict(customer)
 
     def _parse_birthdate(self, raw_birthdate: str) -> date:
         """Converte a data, ou recusa com 422 em vez de 500.
