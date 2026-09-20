@@ -209,6 +209,27 @@ class InvalidTransactionType(QIException):
         translation = "O tipo de transação informado não é suportado pelo sistema."
         super().__init__(title, self.code, http_status, description, translation)
 
+class AccountInvalidStatusTransition(QIException):
+    code = "QIT001017"
+
+    def __init__(self, old_status, new_status) -> None:
+        title = "Invalid Account Status Transition"
+        http_status = 409
+        description = f"Account with status {old_status} cannot change to {new_status}."
+        translation = "Essa conta não pode mudar para esse status."
+        super().__init__(title, self.code, http_status, description, translation)
+
+
+class AccountHasBalance(QIException):
+    code = "QIT001018"
+
+    def __init__(self, account_key, balance) -> None:
+        title = "Account Has Balance"
+        http_status = 409
+        description = f"Account {account_key} cannot be closed with balance {balance}."
+        translation = "Não é possível encerrar uma conta com saldo diferente de zero."
+        super().__init__(title, self.code, http_status, description, translation)
+
 
 # ──────────────────────────────────────────────────────────────────────────────
 # QIT002xxx — Domínio de Segurança (Autenticação e Autorização)
