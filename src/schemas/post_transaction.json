@@ -1,0 +1,41 @@
+{
+    "title": "PostTransaction",
+    "type": "object",
+    "properties": {
+        "type": {
+        "type": "string",
+        "enum": [
+            "deposit",
+            "transfer"
+        ]
+        },
+        "destination_account_key": {
+        "type": "string",
+        "pattern": "^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$"
+        },
+        "origin_account_key": {
+        "type": "string",
+        "pattern": "^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$"
+        },
+        "amount": {
+        "type": "integer",
+        "minimum": 1
+        },
+        "channel": {
+        "type": "string",
+        "enum": [
+            "pix",
+            "ted",
+            "card",
+            "international"
+        ]
+        }
+    },
+    "required": [
+        "type",
+        "destination_account_key",
+        "amount",
+        "channel"
+    ],
+    "additionalProperties": false
+}

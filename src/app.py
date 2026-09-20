@@ -161,6 +161,13 @@ def create_app() -> FastAPI:
         methods=["DELETE"],
     )
 
+    account_resource = AccountResource()
+    application.add_api_route(
+        "/customers/{customer_key}/accounts",
+        account_resource.on_post_open_account,
+        methods=["POST"],
+    )
+
     from resources.auth import AuthResource
     auth_resource = AuthResource()
     application.add_api_route(

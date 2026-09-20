@@ -7,6 +7,13 @@ class AccountRepository:
     def __init__(self, context: Context) -> None:
         self.session = context.db_session
 
+    def get_status(self, enumerator: str) -> AccountStatus:
+        return (
+            self.session.query(AccountStatus)
+            .filter(AccountStatus.enumerator == enumerator)
+            .first()
+        )
+
     def create(self, account_data: dict) -> Account:
         # o customer_id chega por responsabilidade do controller para construir o data corretamente
         account = Account()
@@ -48,6 +55,15 @@ class AccountRepository:
 
     def count_by_customer(self, customer_id: int) -> int:
         return self.session.query(Account).filter(Account.customer_id == customer_id).count()
+
+    def count_active_by_customer(self, customer_id: int) -> int:
+        return (
+            self.session.query(Account)
+            .filter(Account.customer_id == customer_id)
+            .join(Account.status)
+            .filter(AccountStatus.enumerator == AccountStatus.ACTIVE)
+            .count()
+        )
 
     def list_page(self, limit: int, offset: int, filters: dict) -> list:
         query = self.session.query(Account)
