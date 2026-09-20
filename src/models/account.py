@@ -26,3 +26,7 @@ class Account(Base):
 
     customer = relationship("Customer", foreign_keys=[customer_id], lazy="selectin")
     status = relationship("AccountStatus", foreign_keys=[status_id], lazy="selectin")
+    status_events = relationship(
+        "AccountStatusEvent", back_populates="Account",
+        order_by="asc(AccountStatusEvent.created_at)",
+    )

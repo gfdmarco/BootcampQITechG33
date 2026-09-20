@@ -29,3 +29,7 @@ class Transaction(Base):
     destination_account = relationship("Account", foreign_keys=[destination_account_id], lazy="selectin")
     fee = relationship("Fee", foreign_keys=[fee_id], lazy="selectin")
     status = relationship("TransactionStatus", foreign_keys=[status_id], lazy="selectin")
+    status_events = relationship(
+        "TransactionStatusEvent", back_populates="Transaction",
+        order_by="asc(TransactionStatusEvent.created_at)",
+    )
