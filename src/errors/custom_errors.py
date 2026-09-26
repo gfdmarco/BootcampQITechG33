@@ -243,14 +243,50 @@ class InvalidAmount(QIException):
 class AccountNumberGenerationFailed(QIException):
     code = "QIT001020"
 
-    def ___init__(self, amount) -> None:
+    def ___init__(self) -> None:
         title = "Account Number Generation Failed"
         http_status = 422
         description = f"Couldn't generate an account number for this account."
         translation = "Não foi possível gerar um valor de conta para esta conta."
         super().__init__(title, self.code, http_status, description, translation)
 
+class NotFoundTransaction(QIException):
+    """A transação buscada não existe na base de dados."""
+    
+    code = "QIT001021"
 
+    def __init__(self, transaction_key: str) -> None:
+        title = "Transaction not Found"
+        http_status = 404
+        description = f"Transaction with key {transaction_key} was not found."
+        translation = f"A transação com a chave {transaction_key} não foi encontrada."
+        super().__init__(title, self.code, http_status, description, translation)
+
+
+class OriginAccountRequired(QIException):
+    """A requisição é uma transferência, mas a conta de origem não foi enviada."""
+    
+    code = "QIT001022"
+
+    def __init__(self) -> None:
+        title = "Origin Account Required"
+        http_status = 422
+        description = "An origin account key is required for 'transfer' transactions."
+        translation = "A chave da conta de origem é obrigatória para realizar transferências."
+        super().__init__(title, self.code, http_status, description, translation)
+
+
+class TransactionFinalStatus(QIException):
+    """A transação já está num estado final (ex: confirmed, failed) e não pode ser alterada."""
+    
+    code = "QIT001023"
+
+    def __init__(self, old_status: str, new_status: str) -> None:
+        title = "Invalid Transaction Status Transition"
+        http_status = 409
+        description = f"Transaction with status {old_status} cannot update to {new_status}."
+        translation = "O status desta transação não pode ser alterado pois ela já foi finalizada."
+        super().__init__(title, self.code, http_status, description, translation)
 # ──────────────────────────────────────────────────────────────────────────────
 # QIT002xxx — Domínio de Segurança (Autenticação e Autorização)
 # ──────────────────────────────────────────────────────────────────────────────
