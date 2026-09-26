@@ -28,9 +28,9 @@ class TransactionController(BaseController):
         super().__init__(__name__)
 
         # Passa o 'context' aos repositórios, e não a sessão solta.
+        # Só um repositório de transação agora: status e evento
+        # histórico moram dentro dele, não em classes à parte.
         self.transaction_repository = TransactionRepository(self.context)
-        self.status_repository = TransactionStatusRepository(self.context)
-        self.event_repository = TransactionStatusEventRepository(self.context)
         self.fee_repository = FeeRepository(self.context)
         self.account_repository = AccountRepository(self.context)
 
@@ -112,11 +112,11 @@ class TransactionController(BaseController):
         }
 
         
-        transaction = self.transaction_repo.create_transaction(transaction_data)
+        transaction = self.transaction_repository.create_transaction(transaction_data)
 
         # PENDING -> CONFIRMED. Passa o ENUMERADOR (string), não o
         # objeto: quem busca o TransactionStatus certo é o repositório.
-        self.transaction_repo.update_status(
+        self.transaction_repository.update_status(
             transaction,
             TransactionStatus.CONFIRMED,
             reason=f"Operação de {transaction_type} realizada com sucesso",
@@ -198,7 +198,7 @@ class TransactionController(BaseController):
 
         self._check_status_can_change(transaction, new_status_enumerator)
 
-        self.transaction_repo.update_status(transaction, new_status_enumerator, reason=reason)
+        self.transaction_repository.update_status(transaction, new_status_enumerator, reason=reason)
 
         transaction_dto = TransactionDTO.only_obj_key(transaction)
         self.session.commit()
