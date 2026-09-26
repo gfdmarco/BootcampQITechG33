@@ -24,7 +24,7 @@ class Transaction(Base):
         UniqueConstraint("transaction_key"),
         CheckConstraint("type <> 'transfer' OR origin_account_id IS NOT NULL"),
     )
-
+    status_events = relationship("TransactionStatusEvent")
     origin_account = relationship("Account", foreign_keys=[origin_account_id], lazy="selectin")
     destination_account = relationship("Account", foreign_keys=[destination_account_id], lazy="selectin")
     fee = relationship("Fee", foreign_keys=[fee_id], lazy="selectin")

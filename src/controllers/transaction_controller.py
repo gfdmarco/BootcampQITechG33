@@ -15,8 +15,6 @@ from repositories import (
     AccountRepository,
     FeeRepository,
     TransactionRepository,
-    TransactionStatusEventRepository,
-    TransactionStatusRepository,
 )
 
 VALID_TRANSACTION_TYPES = ("deposit", "transfer")
@@ -45,6 +43,12 @@ class TransactionController(BaseController):
         isso vêm primeiro — igual o CPF é validado antes de qualquer
         escrita no sample. Débito e crédito só acontecem depois que a
         posse da conta de origem já foi confirmada, nunca antes.
+
+        A transação nasce PENDING (o `create_transaction` do
+        repositório já cuida disso, sem gerar evento — não há "de
+        onde" ela veio). O `update_status` para CONFIRMED, logo
+        abaixo, é quem grava o primeiro evento de verdade da trilha:
+        "de pending para confirmed".
         """
         self.logger.debug("Processando uma nova transação")
 
@@ -97,8 +101,6 @@ class TransactionController(BaseController):
 
             self.account_repository.credit(destination_account_key, payload["amount"])
 
-        status_confirmed = self.status_repository.get_by_enumerator("confirmed")
-
         transaction_data = {
             "origin_account": origin_account,
             "destination_account": destination_account,
@@ -107,20 +109,16 @@ class TransactionController(BaseController):
             "fee": fee_obj,
             "type": transaction_type,
             "channel": payload["channel"],
-            "status": status_confirmed,
         }
 
-        transaction = self.transaction_repository.create_transaction(transaction_data)
+        
+        transaction = self.transaction_repo.create_transaction(transaction_data)
 
-        # Evento histórico: quem quer saber "o que aconteceu com essa
-        # transação" lê a tabela de eventos — por isso o event_repository é
-        # chamado aqui, e não o update_status do transaction_repository (que
-        # é para mudanças de status POSTERIORES, não para o nascimento
-        # da transação, que já nasce "confirmed" lá em cima).
-        # Confirme o nome do método no seu TransactionStatusEventRepository.
-        self.event_repository.create_event(
-            transaction=transaction,
-            status=status_confirmed,
+        # PENDING -> CONFIRMED. Passa o ENUMERADOR (string), não o
+        # objeto: quem busca o TransactionStatus certo é o repositório.
+        self.transaction_repo.update_status(
+            transaction,
+            TransactionStatus.CONFIRMED,
             reason=f"Operação de {transaction_type} realizada com sucesso",
         )
 
@@ -158,8 +156,11 @@ class TransactionController(BaseController):
         Ninguém pode listar transações de conta alheia. Por isso o
         filtro por conta (origem ou destino) é obrigatório aqui, e cada
         conta filtrada precisa pertencer a quem está autenticado — do
-        contrário a busca nem chega ao repositório. Isto é o que o
-        comentário antigo dizia fazer, mas não fazia; agora faz.
+        contrário a busca nem chega ao repositório.
+
+        Isto é regra de negócio, não de formato: o schema
+        (get_transactions.json) só confere se a chave TEM CARA de UUID.
+        Se ela existe e a quem pertence é o controller quem sabe.
         """
         origin_key = filters.get("origin_account_key")
         destination_key = filters.get("destination_account_key")
@@ -188,7 +189,7 @@ class TransactionController(BaseController):
             "is_last_page": is_last_page,
         }
 
-    def update_status(self, transaction_key: str, new_status_enumerator: str) -> dict:
+    def update_status(self, transaction_key: str, new_status_enumerator: str, reason: str = None) -> dict:
         """Permite que serviços internos mudem o estado (ex.: pending para confirmed)."""
         transaction = self.transaction_repository.get_by_key(transaction_key)
 
@@ -197,16 +198,7 @@ class TransactionController(BaseController):
 
         self._check_status_can_change(transaction, new_status_enumerator)
 
-        new_status_obj = self.status_repository.get_by_enumerator(new_status_enumerator)
-        self.transaction_repository.update_status(transaction, new_status_obj)
-
-        # Toda mudança de status depois da criação também vira evento —
-        # mesmo caminho usado em process_transaction.
-        self.event_repository.create_event(
-            transaction=transaction,
-            status=new_status_obj,
-            reason=f"Status alterado para {new_status_enumerator}",
-        )
+        self.transaction_repo.update_status(transaction, new_status_enumerator, reason=reason)
 
         transaction_dto = TransactionDTO.only_obj_key(transaction)
         self.session.commit()
@@ -217,5 +209,5 @@ class TransactionController(BaseController):
         old_status = transaction.status.enumerator
 
         # Impede que uma transação já confirmada ou falhada seja reaberta.
-        if old_status in ["confirmed", "failed"]:
+        if old_status in [TransactionStatus.CONFIRMED, TransactionStatus.FAILED]:
             raise TransactionFinalStatus(old_status, new_status)
