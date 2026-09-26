@@ -17,7 +17,8 @@ from errors import (
     CustomerAccountLimitReached,
     NotFoundAccount,
     AccountInvalidStatusTransition,
-    AccountHasBalance
+    AccountHasBalance,
+    InvalidAmount
 )
 from models import Account, AccountStatus, Customer, CustomerStatus
 from repositories import AccountRepository, TransactionRepository, CustomerRepository
@@ -45,7 +46,7 @@ class AccountController(BaseController):
 
         accounts_count = self.account_repository.count_active_by_customer(customer_id)
         if accounts_count >= MAX_ACCOUNTS_PER_CUSTOMER:
-            raise CustomerAccountLimitReached(customer_id, MAX_ACCOUNTS_PER_CUSTOMER)
+            raise CustomerAccountLimitReached()
 
         if self.account_repository.get_by_branch_and_number(branch, number) is not None:
             raise DuplicatedAccount(branch, number)
@@ -58,26 +59,31 @@ class AccountController(BaseController):
 
         return account_dto
 
-    def get_balance(self, customer_key: str, account_key: str) -> int:
-        customer = self.customer_repository.get_by_key(customer_key)
-        if customer is None:
-            raise NotFoundCustomer(customer_key)
+    def get_balance(self, account_key: str, caller_customer_key: str) -> int:
+        caller_customer = self.customer_repository.get_by_key(caller_customer_key)
+        if caller_customer is None:
+            raise NotFoundCustomer(caller_customer_key)
         
         account = self.account_repository.get_by_key(account_key)
 
         if account is None:
             raise NotFoundAccount(account_key)
         
-        if customer.id != account.customer.id:
+        if caller_customer.id != account.customer.id:
             raise ForbiddenAction()
 
         return account.balance
 
-    def get_by_key(self, account_key: str) -> dict:
+    def get_by_key(self, account_key: str, caller_customer_key: str) -> dict:
         account = self.account_repository.get_by_key(account_key)
 
         if account is None:
             raise NotFoundAccount(account_key)
+
+        caller_customer = self.customer_repository.get_by_key(caller_customer_key)
+
+        if caller_customer.id != account.customer_id:
+            raise ForbiddenAction()
 
         return AccountDTO.obj_to_dict(account)
 
@@ -109,7 +115,7 @@ class AccountController(BaseController):
         except ValueError:
             raise InvalidDate(rawDate)
 
-    def get_list(self, limit: int, offset: int, filters: dict) -> dict:
+    def get_list(self, limit: int, offset: int, filters: dict, caller_customer_key: str) -> dict:
         date_from = filters.get("date_from")
         date_to = filters.get("date_to")
 
@@ -182,3 +188,23 @@ class AccountController(BaseController):
             "transaction_list_dto": TransactionDTO.list_obj_to_list_dict(transaction_list),
             "is_last_page": is_last_page,
         }
+
+    def credit(self, account_key: str, amount: int) -> dict:
+        account = self.account_repository.get_by_key(account_key)
+
+        if account is None:
+            raise NotFoundAccount(account_key)
+        if amount <= 0:
+            raise InvalidAmount(amount)
+        
+        account.balance += amount
+
+    def debit(self, account_key: str, amount: int) -> dict:
+        account = self.account_repository.get_by_key(account_key)
+
+        if account is None:
+            raise NotFoundAccount(account_key)
+        if amount <= 0:
+            raise InvalidAmount(amount)
+
+        account.balance -= amount
