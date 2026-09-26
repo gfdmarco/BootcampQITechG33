@@ -30,11 +30,11 @@ class TransactionController(BaseController):
         super().__init__(__name__)
 
         # Passa o 'context' aos repositórios, e não a sessão solta.
-        self.transaction_repo = TransactionRepository(self.context)
-        self.status_repo = TransactionStatusRepository(self.context)
-        self.event_repo = TransactionStatusEventRepository(self.context)
-        self.fee_repo = FeeRepository(self.context)
-        self.account_repo = AccountRepository(self.context)
+        self.transaction_repository = TransactionRepository(self.context)
+        self.status_repository = TransactionStatusRepository(self.context)
+        self.event_repository = TransactionStatusEventRepository(self.context)
+        self.fee_repository = FeeRepository(self.context)
+        self.account_repository = AccountRepository(self.context)
 
     def process_transaction(self, payload: dict, authenticated_customer_key: str) -> dict:
         """
@@ -55,7 +55,7 @@ class TransactionController(BaseController):
             raise InvalidTransactionType(transaction_type)
 
         # Busca pela chave pública — o controller nunca enxerga o `id`.
-        destination_account = self.account_repo.get_by_key(destination_account_key)
+        destination_account = self.account_repository.get_by_key(destination_account_key)
         if destination_account is None:
             raise NotFoundAccount(destination_account_key)
 
@@ -65,14 +65,14 @@ class TransactionController(BaseController):
 
         if transaction_type == "deposit":
             # Depósito não tem origem nem tarifa.
-            self.account_repo.credit(destination_account_key, payload["amount"])
+            self.account_repository.credit(destination_account_key, payload["amount"])
 
         else:  # transfer
             origin_key = payload.get("origin_account_key")
             if not origin_key:
                 raise OriginAccountRequired()
 
-            origin_account = self.account_repo.get_by_key(origin_key)
+            origin_account = self.account_repository.get_by_key(origin_key)
             if origin_account is None:
                 raise NotFoundAccount(origin_key)
 
@@ -81,7 +81,7 @@ class TransactionController(BaseController):
             if origin_account.customer.customer_key != authenticated_customer_key:
                 raise ForbiddenAction()
 
-            fee_obj = self.fee_repo.get_by_type(payload["channel"])
+            fee_obj = self.fee_repository.get_by_type(payload["channel"])
 
             # Sem float: percentage é tratado como inteiro (ex.: 2 = 2%).
             # Se o modelo Fee guardar percentage com casas decimais,
@@ -91,13 +91,13 @@ class TransactionController(BaseController):
             total_debit = payload["amount"] + fee_amount
 
             # Débito atômico: ou desconta tudo, ou nada é gravado.
-            success = self.account_repo.debit(origin_key, total_debit)
+            success = self.account_repository.debit(origin_key, total_debit)
             if not success:
                 raise InsufficientBalance()
 
-            self.account_repo.credit(destination_account_key, payload["amount"])
+            self.account_repository.credit(destination_account_key, payload["amount"])
 
-        status_confirmed = self.status_repo.get_by_enumerator("confirmed")
+        status_confirmed = self.status_repository.get_by_enumerator("confirmed")
 
         transaction_data = {
             "origin_account": origin_account,
@@ -110,15 +110,15 @@ class TransactionController(BaseController):
             "status": status_confirmed,
         }
 
-        transaction = self.transaction_repo.create_transaction(transaction_data)
+        transaction = self.transaction_repository.create_transaction(transaction_data)
 
         # Evento histórico: quem quer saber "o que aconteceu com essa
-        # transação" lê a tabela de eventos — por isso o event_repo é
-        # chamado aqui, e não o update_status do transaction_repo (que
+        # transação" lê a tabela de eventos — por isso o event_repository é
+        # chamado aqui, e não o update_status do transaction_repository (que
         # é para mudanças de status POSTERIORES, não para o nascimento
         # da transação, que já nasce "confirmed" lá em cima).
         # Confirme o nome do método no seu TransactionStatusEventRepository.
-        self.event_repo.create_event(
+        self.event_repository.create_event(
             transaction=transaction,
             status=status_confirmed,
             reason=f"Operação de {transaction_type} realizada com sucesso",
@@ -133,7 +133,7 @@ class TransactionController(BaseController):
     def get_by_key(self, transaction_key: str, authenticated_customer_key: str) -> dict:
         self.logger.debug(f"Buscando a transação de chave {transaction_key}")
 
-        transaction = self.transaction_repo.get_by_key(transaction_key)
+        transaction = self.transaction_repository.get_by_key(transaction_key)
 
         if transaction is None:
             raise NotFoundTransaction(transaction_key)
@@ -170,11 +170,11 @@ class TransactionController(BaseController):
             )
 
         for account_key in filter(None, (origin_key, destination_key)):
-            account = self.account_repo.get_by_key(account_key)
+            account = self.account_repository.get_by_key(account_key)
             if account is None or account.customer.customer_key != authenticated_customer_key:
                 raise ForbiddenAction()
 
-        transactions_list = self.transaction_repo.list_page(limit, offset, filters)
+        transactions_list = self.transaction_repository.list_page(limit, offset, filters)
 
         # Pedimos um a mais que o limite só pra saber se existe próxima
         # página. Se veio o extra, ele não entra na resposta.
@@ -190,19 +190,19 @@ class TransactionController(BaseController):
 
     def update_status(self, transaction_key: str, new_status_enumerator: str) -> dict:
         """Permite que serviços internos mudem o estado (ex.: pending para confirmed)."""
-        transaction = self.transaction_repo.get_by_key(transaction_key)
+        transaction = self.transaction_repository.get_by_key(transaction_key)
 
         if transaction is None:
             raise NotFoundTransaction(transaction_key)
 
         self._check_status_can_change(transaction, new_status_enumerator)
 
-        new_status_obj = self.status_repo.get_by_enumerator(new_status_enumerator)
-        self.transaction_repo.update_status(transaction, new_status_obj)
+        new_status_obj = self.status_repository.get_by_enumerator(new_status_enumerator)
+        self.transaction_repository.update_status(transaction, new_status_obj)
 
         # Toda mudança de status depois da criação também vira evento —
         # mesmo caminho usado em process_transaction.
-        self.event_repo.create_event(
+        self.event_repository.create_event(
             transaction=transaction,
             status=new_status_obj,
             reason=f"Status alterado para {new_status_enumerator}",

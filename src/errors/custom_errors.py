@@ -127,7 +127,6 @@ class InvalidBirthdate(QIException):
         super().__init__(title, self.code, http_status, description, translation)
 
 class DuplicatedAccount(QIException):
-
     code = "QIT001010"
 
     def __init__(self, branch, number) -> None:
@@ -228,6 +227,27 @@ class AccountHasBalance(QIException):
         http_status = 409
         description = f"Account {account_key} cannot be closed with balance {balance}."
         translation = "Não é possível encerrar uma conta com saldo diferente de zero."
+        super().__init__(title, self.code, http_status, description, translation)
+
+#ainda precisamos validar a numeracao do http_status (desconheco qual numero certinho vai na dezena e unidade)
+class InvalidAmount(QIException):
+    code = "QIT001019"
+
+    def ___init__(self, amount) -> None:
+        title = "Invalid Amount"
+        http_status = 422
+        description = f"The amount of {amount} required to credit or debit is invalid."
+        translation = "O valor para ser creditado ou debitado é inválido."
+        super().__init__(title, self.code, http_status, description, translation)
+
+class AccountNumberGenerationFailed(QIException):
+    code = "QIT001020"
+
+    def ___init__(self, amount) -> None:
+        title = "Account Number Generation Failed"
+        http_status = 422
+        description = f"Couldn't generate an account number for this account."
+        translation = "Não foi possível gerar um valor de conta para esta conta."
         super().__init__(title, self.code, http_status, description, translation)
 
 

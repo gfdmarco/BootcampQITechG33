@@ -27,9 +27,9 @@ def register_jwt_middleware(application: FastAPI) -> None:
             return await call_next(request)
 
         # Checa se é uma rota pública do negócio (ex: /customers, /auth/login)
-        for endpoint, method in JWT_PUBLIC_ENDPOINTS:
-            if request.url.path.startswith(endpoint) and request.method == method:
-                return await call_next(request)
+        # mudança: antes tava liberando rotas publicas de post em customers, comprometendo segurança
+        if (request.url.path.rstrip("/"), request.method) in JWT_PUBLIC_ENDPOINTS:
+            return await call_next(request)
 
         # A partir daqui, o token é obrigatório
         auth_header = request.headers.get("Authorization")

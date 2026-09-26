@@ -11,10 +11,13 @@ from errors import (
     UnderageCustomer,
     NotFoundCustomer,
     ForbiddenAction,
+    AccountNumberGenerationFailed
 )
 from models import CustomerStatus
 from repositories import CustomerRepository
+from repositories import AccountRepository
 from utils.document_number import is_valid_cpf
+from utils.account_number import generate_account_number
 
 MINIMUM_AGE = 18
 
@@ -25,6 +28,7 @@ class CustomerController(BaseController):
     def __init__(self) -> None:
         super().__init__(__name__)
         self.customer_repository = CustomerRepository(self.context)
+        self.account_repository = AccountRepository(self.context)
 
     def create(self, customer_data: dict) -> dict:
         self.logger.debug("Criando um novo Customer")
@@ -84,7 +88,12 @@ class CustomerController(BaseController):
 
         # Gera branch e number — são dados internos do banco
         account_data["branch"] = "0001"
-        account_data["number"] = str(customer.id)
+        for _ in range(5): #tentamos 5 vezes - suficiente pra gerar um único
+            account_data["number"] = generate_account_number()
+            if self.account_repository.get_by_branch_and_number(account_data["branch"], account_data["number"]) is None:
+                break #conseguimos gerar um id único
+            else:
+                raise AccountNumberGenerationFailed() #quase impossível bater neste erro
 
         # Delega para o AccountController — ele valida limite e duplicidade
         from controllers.account_controller import AccountController
