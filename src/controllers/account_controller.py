@@ -44,7 +44,7 @@ class AccountController(BaseController):
         account = self.account_repository.get_by_key(account_key)
         caller_customer = self.customer_repository.get_by_key(caller_customer_key)
         if account is None:
-            return NotFoundAccount(account_key)
+            raise NotFoundAccount(account_key)
         if caller_customer is None:
             raise NotFoundCustomer(caller_customer_key)
         if caller_customer.id != account.customer_id:
@@ -70,6 +70,7 @@ class AccountController(BaseController):
         self.session.flush()
         account_dto = AccountDTO.obj_to_dict(account)
 
+        self.session.commit()
         return account_dto
 
     def get_balance(self, account_key: str, caller_customer_key: str) -> int:
@@ -82,10 +83,6 @@ class AccountController(BaseController):
 
     def update_status(self, account_key: str, new_status: str, caller_customer_key: str) -> dict:
         account = self.get_account_aux(account_key, caller_customer_key)
-        caller_customer = self.customer_repository.get_by_key(caller_customer_key)
-
-        if account.customer_id != caller_customer.id:
-            raise ForbiddenAction()
         
         old_status = account.status.enumerator
 
@@ -123,11 +120,11 @@ class AccountController(BaseController):
         date_to = filters.get("date_to")
 
         if date_from is not None:
-            date_from = self._parse_date(date_from)
+            date_from = self._parseDate(date_from)
             filters["date_from"] = date_from
 
         if date_to is not None:
-            date_to = self._parse_date(date_to)
+            date_to = self._parseDate(date_to)
             filters["date_to"] = date_to
 
         if date_from is not None and date_to is not None:
@@ -184,19 +181,3 @@ class AccountController(BaseController):
             "transaction_list_dto": TransactionDTO.list_obj_to_list_dict(transaction_list),
             "is_last_page": is_last_page,
         }
-
-    def credit(self, account_key: str, caller_customer_key: str, amount: int) -> dict:
-        account = self.account_repository.get_by_key(account_key)
-
-        if amount <= 0:
-            raise InvalidAmount(amount)
-        
-        self.account_repository.credit(account.id, amount)
-
-    def debit(self, account_key: str, caller_customer_key: str, amount: int) -> dict:
-        account = self.get_account_aux(account_key, caller_customer_key)
-
-        if amount <= 0:
-            raise InvalidAmount(amount)
-
-        self.account_repository.debit(account.id, amount)

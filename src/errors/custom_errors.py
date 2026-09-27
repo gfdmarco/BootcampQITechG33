@@ -131,7 +131,7 @@ class DuplicatedAccount(QIException):
 
     def __init__(self, branch, number) -> None:
         title = "Duplicated Account"
-        http_status = 422
+        http_status = 409
         description = f"The branch {branch} and the number {number} already respond to an existing account."
         translation = "A agência e conta informadas já correspondem a uma conta existente"
         super().__init__(title, self.code, http_status, description, translation)
@@ -164,8 +164,8 @@ class CustomerAccountLimitReached(QIException):
     def __init__(self) -> None:
         title = "Account Limit Reached"
         http_status = 422
-        description = "The customer has reached the maximum number of active accounts (3)."
-        translation = "O cliente atingiu o limite máximo de contas ativas permitidas (3)."
+        description = "The customer has reached the maximum number of active accounts (5)."
+        translation = "O cliente atingiu o limite máximo de contas ativas permitidas (5)."
         super().__init__(title, self.code, http_status, description, translation)
 
 
@@ -234,7 +234,7 @@ class AccountNumberGenerationFailed(QIException):
 
     def __init__(self) -> None:
         title = "Account Number Generation Failed"
-        http_status = 422
+        http_status = 500
         description = f"Couldn't generate an account number for this account."
         translation = "Não foi possível gerar um valor de conta para esta conta."
         super().__init__(title, self.code, http_status, description, translation)

@@ -65,14 +65,14 @@ class TransactionController(BaseController):
         if caller_customer is None:
             raise NotFoundCustomer(authenticated_customer_key)
         
-        if caller_customer.status.enumerator != CustomerStatus.SUCCESS:
+        if caller_customer.status.enumerator == CustomerStatus.FAILED:
             raise ForbiddenAction()
         
         # Busca pela chave pública — o controller nunca enxerga o `id`.
         destination_account = self.account_repository.get_by_key(destination_account_key)
         if destination_account is None:
             raise NotFoundAccount(destination_account_key)
-        if destination_account.sattus.enumerator != AccountStatus.ACTIVE:
+        if destination_account.status.enumerator != AccountStatus.ACTIVE:
             raise ForbiddenAction()
 
         origin_account = None
@@ -83,7 +83,7 @@ class TransactionController(BaseController):
             # Depósito não tem origem nem tarifa.
             if destination_account.customer_id != caller_customer.id:
                 raise ForbiddenAction()
-            self.account_repository.credit(destination_account_key, authenticated_customer_key, payload["amount"])
+            self.account_repository.credit(destination_account.id, payload["amount"])
 
         else:  # transfer
             origin_key = payload.get("origin_account_key")
@@ -115,16 +115,15 @@ class TransactionController(BaseController):
             total_debit = int(payload["amount"]) + fee_amount
 
             # Débito atômico: ou desconta tudo, ou nada é gravado.
-            if origin_account.id < destination_account.id: 
-                #determinamos uma ordem para evitar deadlock e devolver erro 500
-                self.account_repository.debit(origin_key, authenticated_customer_key, total_debit)
-                self.account_repository.credit(destination_account_key, authenticated_customer_key, payload["amount"])
+            amount = int(payload["amount"])
+            if origin_account.id < destination_account.id:
+                if not self.account_repository.debit(origin_account.id, total_debit):
+                    raise InsufficientBalance()
+                self.account_repository.credit(destination_account.id, amount)
             else:
-                #invertemos a ordem: sempre a conta com menor id trava primeiro ao alterar o saldo (decisão nossa)
-                self.account_repository.credit(destination_account_key, authenticated_customer_key, payload["amount"])
-                self.account_repository.debit(origin_key, authenticated_customer_key, total_debit)
-
-
+                self.account_repository.credit(destination_account.id, amount)
+                if not self.account_repository.debit(origin_account.id, total_debit):
+                    raise InsufficientBalance()
 
         transaction_data = {
             "origin_account": origin_account,
