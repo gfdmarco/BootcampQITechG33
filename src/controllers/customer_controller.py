@@ -65,6 +65,7 @@ class CustomerController(BaseController):
         # O evento de status precisa ser criado ANTES de montar o DTO,
         # para que status_events já apareça na resposta do POST.
         self.customer_repository.update_status(customer, CustomerStatus.CREATED)
+        self.customer_repository.update_status(customer, CustomerStatus.SUCCESS)
 
         self.session.flush()
         customer_dto = CustomerDTO.obj_to_dict(customer)
@@ -174,24 +175,14 @@ class CustomerController(BaseController):
         if customer is None:
             raise NotFoundCustomer(customer_key)
 
-        if customer.status.enumerator != CustomerStatus.SUCCESS:
-            raise ForbiddenAction()
-
-        if customer is not None and customer.status.enumerator == CustomerStatus.FAILED:
-            customer = None   # cai no DUMMY_HASH e volta 401 igual aos outros
-
-        # Deleção lógica e auditoria
-        self.customer_repository.update_status(
-            customer, 
-            CustomerStatus.FAILED, 
-            reason="Customer requested account closure."
-        )
+        if customer.status.enumerator == CustomerStatus.FAILED:
+            return
 
         customer_accounts = self.account_repository.list_by_customer(customer.id)
 
         #primeiro verifico se alguma conta tem saldo
         for account in customer_accounts:
-            if account.balance > 0 and account.status.enumerator != AccountStatus.CLOSED:
+            if account.balance != 0 and account.status.enumerator != AccountStatus.CLOSED:
                 raise CustomerHasBalance(customer_key)
             
         #agora podemos mexer de fato nos status
@@ -199,9 +190,15 @@ class CustomerController(BaseController):
             if account.status.enumerator != AccountStatus.CLOSED:
                 self.account_repository.update_status(account, AccountStatus.CLOSED)
 
-        self.customer_repository.update_status(customer, CustomerStatus.FAILED, reason="Customer requested account closure"
-)
+        self.customer_repository.update_status(customer, CustomerStatus.FAILED, reason="Customer requested account closure")   
 
+        # Deleção lógica e auditoria
+        self.customer_repository.update_status(
+            customer, 
+            CustomerStatus.FAILED, 
+            reason="Customer requested account closure."
+        )
+        
         # Anonimização LGPD (O CPF é mantido por compliance/Risco de fraude)
         customer.name = "DELETED_USER"
         customer.email = f"deleted_{customer.customer_key}@closed.invalid"

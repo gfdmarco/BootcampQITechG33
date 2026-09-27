@@ -1,4 +1,4 @@
-from fastapi import Request, status
+from fastapi import Request, status, Response
 from fastapi.encoders import jsonable_encoder
 from fastapi.responses import JSONResponse
 
@@ -75,10 +75,7 @@ class CustomerResource:
         
         controller.delete(customer_key, token_customer_key)
 
-        return JSONResponse(
-            content=None,
-            status_code=status.HTTP_204_NO_CONTENT,
-        )
+        return Response(status_code=status.HTTP_204_NO_CONTENT)
 
     @SchemaHandler.validate("post_customer_account.json")
     def on_post_account(self, customer_key: str, payload: dict, request: Request) -> JSONResponse:
@@ -89,5 +86,5 @@ class CustomerResource:
 
         return JSONResponse(
                 content=jsonable_encoder(account),
-                status_code=status.HTTP_201_NO_CONTENT,
+                status_code=status.HTTP_201_CREATED,
             )

@@ -73,6 +73,10 @@ class CustomerRepository:
         document_number = filters.get("document_number")
         if document_number is not None:
             query = query.filter(Customer.document_number == document_number)
+
+        customer_id = filters.get("customer_id")
+        if customer_id is not None:
+            query = query.filter(Customer.id == customer_id)
     
         query = query.order_by(Customer.created_at.desc(), Customer.id.desc())
 

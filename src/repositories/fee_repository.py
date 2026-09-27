@@ -1,8 +1,9 @@
+from database import Context
 from models import Fee
 
 class FeeRepository:
-    def __init__(self, session):
-        self.session = session
+    def __init__(self, context: Context) -> None:
+        self.session = context.db_session
 
     def get_by_type(self, fee_type: str) -> Fee:
         """
