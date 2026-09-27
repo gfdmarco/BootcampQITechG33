@@ -64,8 +64,74 @@ erDiagram
     ACCOUNT ||--o{ TRANSACTION : "envia / recebe"
     TRANSACTION ||--o| FEE : "gera tarifa"
 ```
+### Decisões de Modelagem e Padrões de Banco de Dados
 
+Para garantir a resiliência financeira, evitar perdas por precisão matemática e proteger a infraestrutura, o modelo de dados adota três padrões arquiteturais rigorosos:
+
+#### 1. Dupla Identificação (Isolamento de IDs)
+A exposição de chaves primárias sequenciais revela a volumetria do negócio e facilita ataques de enumeração. Por isso, todo registro no sistema possui duas formas de identificação:
+*   **ID Interno (`SERIAL` / `INTEGER`):** Usado estritamente para as chaves estrangeiras e relacionamentos internos físicos dentro do banco de dados, garantindo alta performance nas buscas e *joins*.
+*   **Chave Externa (`UUID`):** Identificador público (ex: `account_key`, `customer_key`), sendo o único valor exposto nos *endpoints* da API e URLs.
+
+```mermaid
+flowchart LR
+    subgraph Mundo Externo API
+        Req[Request: GET /accounts/a1b2c3d4...]
+        DTO[Resposta HTTP: account_key: a1b2c3d4...]
+    end
+    
+    subgraph Banco de Dados PostgreSQL
+        Acc[Tabela: ACCOUNT\n id: 1042 SERIAL\n key: a1b2c3d4... UUID]
+        Trans[Tabela: TRANSACTION\n origin_account_id: 1042]
+        
+        Acc --- Trans
+    end
+
+    Req -->|"Busca por UUID"| Acc
+    Acc -->|"Mascarado no DTO"| DTO
+```
+#### 2. Matemática Inteira para Valores Monetários (Centavos)
+O dinheiro no banco de dados não utiliza casas decimais (`FLOAT` ou `DECIMAL`), pois operações de ponto flutuante causam erros de precisão e arredondamento[cite: 2].   
+* Todos os valores monetários (`amount`, `balance`) são salvos como inteiros (`BIGINT`), representando sempre os centavos da moeda[cite: 2].   
+* No momento em que o JSON da requisição chega à API (ex: 100.0), o *controller* converte esse valor imediatamente para `int` antes de qualquer manipulação de regra de negócio[cite: 2].
+
+#### 3. Rastreabilidade e Imutabilidade (Eventos de Status)
+Em sistemas financeiros, o passado nunca é apagado[cite: 2]. Para garantir total rastreabilidade sobre o que aconteceu com uma transação, não sobrescrevemos o status anterior.
+* **Enumeradores Estáticos:** Utilizamos tabelas de domínio estático (ex: `transaction_status`) para padronizar os estados possíveis, como 'pending' e 'confirmed'[cite: 2].
+* **Tabelas de Eventos:** Cada mudança de status gera um novo registro em tabelas como `transaction_status_event`, criando uma linha do tempo exata e imutável para a vida de cada transação[cite: 2].
+
+```mermaid
+erDiagram
+    TRANSACTION ||--o{ TRANSACTION_STATUS_EVENT : "registra transição de estado"
+    TRANSACTION_STATUS_EVENT }o--|| TRANSACTION_STATUS : "mapeia para"
+
+    TRANSACTION {
+        int id PK "SERIAL"
+        uuid transaction_key UK "UUID"
+        bigint amount "Em centavos"
+    }
+    TRANSACTION_STATUS {
+        int id PK
+        string status_name UK "'pending', 'confirmed'"
+    }
+    TRANSACTION_STATUS_EVENT {
+        int id PK
+        int transaction_id FK
+        int status_id FK
+        datetime created_at
+    }
+```
+#### 4. Máquina de Estados (Ciclo de Vida das Entidades)
+Para refletir fielmente o domínio bancário, as entidades principais possuem um ciclo de vida restrito, controlado por campos de `status` no banco de dados[cite: 2]:
+* **Conta (`ACCOUNT.status`):** Uma conta só pode enviar ou receber fundos se estiver **ativa**[cite: 2]. Contas com status **inativo, bloqueado ou encerrado** são rejeitadas imediatamente na camada de validação de negócios[cite: 2].
+* **Transação (`TRANSACTION_STATUS`):** O ciclo de uma transação transita por estados padronizados. Toda transação nasce como **'pending'** e só avança para **'confirmed'** após o sucesso da execução atômica do banco de dados[cite: 2]. Falhas de saldo ou regras de negócio resultam em **'failed'** ou status de erro análogo.
+
+#### 5. Segurança e Dados Sensíveis
+O modelo de dados implementa proteções fundamentais para informações críticas:
+* **Senhas:** A coluna `password_hash` na tabela `CUSTOMER` jamais armazena senhas em texto plano. Todo acesso deve utilizar algoritmos de *hashing* fortes (ex: Bcrypt ou Argon2).
+* **Identidade Segura:** O modelo não confia em dados enviados no corpo da requisição para autorização[cite: 2]. A identificação do cliente para consultas e transferências depende única e exclusivamente do token JWT gerado e validado no middleware, extraindo o `customer_key` de forma segura[cite: 2].
 ---
+
 
 ## 🛤️ FRENTE DE TRABALHO 2: Rotas e Fluxos (Responsável: zumbao)
 
