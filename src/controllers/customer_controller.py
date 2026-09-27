@@ -90,6 +90,8 @@ class CustomerController(BaseController):
         customer = self.customer_repository.get_by_key(customer_key)
         if customer is None:
             raise NotFoundCustomer(customer_key)
+        if customer.status.enumerator == CustomerStatus.FAILED:
+            raise ForbiddenAction()
 
         # Gera branch e number — são dados internos do banco
         account_data["branch"] = "0001"

@@ -34,34 +34,27 @@ class TestAccountStatement:
         bob_acc = self._create_account(bob_key, bob_token)
         
         # Give Alice money
-        RequestGenerator.POST_transaction({
-            "account_key": alice_acc,
-            "type": "deposit",
-            "amount": 1000
-        }, alice_token)
-        
+        status, _ = RequestGenerator.POST_transaction(
+            PayloadGenerator.deposit(alice_acc, 1000), alice_token
+        )
+        assert status == 201
+
         # Transfer to Bob
-        status, response = RequestGenerator.POST_transaction({
-            "origin_account_key": alice_acc,
-            "destination_account_key": bob_acc,
-            "type": "pix",
-            "amount": 100
-        }, alice_token)
-        
+        status, response = RequestGenerator.POST_transaction(
+            PayloadGenerator.transfer(alice_acc, bob_acc, 100), alice_token
+        )
+        assert status == 201
         transaction_key = response["transaction_key"]
 
         # Alice gets statement
         status, response = RequestGenerator.GET_account_statement(alice_acc, None, alice_token)
         assert status == 200
-        assert "data" in response
-        
         transaction_keys = [item["transaction_key"] for item in response["data"]]
         assert transaction_key in transaction_keys
 
         # Bob gets statement
         status, response = RequestGenerator.GET_account_statement(bob_acc, None, bob_token)
         assert status == 200
-        
         transaction_keys = [item["transaction_key"] for item in response["data"]]
         assert transaction_key in transaction_keys
 
