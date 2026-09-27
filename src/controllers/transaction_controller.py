@@ -1,5 +1,6 @@
 from controllers.base_controller import BaseController
 from dtos import TransactionDTO
+from connectors.risk_engine_connector import RiskEngineConnector
 from errors import (
     ForbiddenAction,
     InsufficientBalance,
@@ -36,6 +37,7 @@ class TransactionController(BaseController):
         self.fee_repository = FeeRepository(self.context)
         self.account_repository = AccountRepository(self.context)
         self.customer_repository = CustomerRepository(self.context)
+        self.risk_connector = RiskEngineConnector()
 
     def process_transaction(self, payload: dict, authenticated_customer_key: str) -> dict:
         """
@@ -54,6 +56,13 @@ class TransactionController(BaseController):
         "de pending para confirmed".
         """
         self.logger.debug("Processando uma nova transação")
+
+        # Validação via Connector Externo (Anti-Fraud Sidecar)
+        self.risk_connector.evaluate_transaction(
+            customer_key=authenticated_customer_key,
+            amount=payload.get("amount", 0),
+            transaction_type=payload.get("type")
+        )
 
         transaction_type = payload.get("type")
         destination_account_key = payload.get("destination_account_key")

@@ -131,3 +131,77 @@ Abaixo está o cronograma lógico de implementação para plugar essas expansõe
 *   **Entregável 4.2: Liquidação de Boleto (Assíncrono)**
     *   **Ação:** Criar rota `POST /boletos/pay` (Simulando o sistema externo bancário).
     *   **Integração:** Como proposto, usaremos processamento assíncrono. O pagamento cai em uma fila. Um worker a consome e faz o acréscimo (`credit`) no SGBD da conta recebedora na "virada do dia", gerando um registro `TRANSACTION` de `type = boleto_compensation`.
+
+
+---
+
+## 🤖 MÓDULO SATÉLITE 3.3: Classificação de Risco via LLM (Async Worker)
+
+### A Ideia
+Em vez de limitar a análise de risco a regras estáticas e determinísticas (ex: "Valor > R$ 50 mil = DENY"), podemos enriquecer o sistema com um **Worker Assíncrono** que usa uma LLM para analisar o padrão comportamental completo do cliente (histórico de transações dos últimos 30 dias) e atualizar seu score de risco de forma proativa e periódica.
+
+### Por que Assíncrono (e não Síncrono)?
+LLMs gratuitas como **Groq** (Llama 3 / Mixtral) têm latência de 500ms a 3s por inferência. Modelos como o Gemini Free Tier chegam a 5-15s. Isso inviabiliza o uso no caminho direto da transação (que tem timeout de 2s). A solução é separar os dois tempos:
+
+*   **Tempo Real (Síncrono):** O interceptor do `TransactionController` consulta o Risk Engine que apenas **lê** um `risk_score` pré-calculado. Resposta em < 50ms.
+*   **Análise Profunda (Assíncrono):** Um Worker roda a cada X horas, alimenta a LLM com o histórico do cliente e **escreve** o novo score no banco do Risk Engine.
+
+```mermaid
+sequenceDiagram
+    actor Cliente
+    participant Core as API Core
+    participant RiskEngine as Risk Engine
+    participant Worker as LLM Worker (Cron)
+    participant Groq as Groq API (Llama 3)
+
+    Note over Worker,Groq: Executa a cada 6 horas (assíncrono)
+    Worker->>Core: GET /accounts/{key}/statement (histórico 30d)
+    Core-->>Worker: Transações do cliente
+    Worker->>Groq: Prompt com histórico + pergunta de score
+    Groq-->>Worker: Classificação - LOW, MEDIUM, HIGH
+    Worker->>RiskEngine: PATCH /risk_profile/{customer_key}
+    RiskEngine-->>Worker: 200 OK - score atualizado
+
+    Note over Cliente,RiskEngine: Fluxo síncrono em tempo real
+    Cliente->>Core: POST /transactions (PIX de R$ 5.000)
+    Core->>RiskEngine: POST /evaluate - lê score do banco
+    RiskEngine-->>Core: APPROVE ou DENY (< 50ms)
+    Core-->>Cliente: 201 Created ou 403 Denied
+```
+
+### Tecnologia e Modelo Recomendados
+*   **Groq API (gratuita):** Usa os modelos `llama-3.1-8b-instant` ou `mixtral-8x7b`. Latência de ~400ms e generosa no plano free. API 100% compatível com o padrão OpenAI.
+*   **Prompt de Classificação:**
+    ```
+    Você é um analista de risco bancário. Com base no histórico de transações
+    abaixo, classifique o perfil do cliente como LOW, MEDIUM ou HIGH.
+    Responda APENAS com uma dessas três palavras.
+
+    Histórico: {transaction_summary}
+    ```
+
+---
+
+## 📋 STATUS DE IMPLEMENTAÇÃO DO RISK ENGINE
+
+### O que já foi entregue (`feat/risk-api-module`)
+
+*   **[DONE]** Estrutura do microsserviço (`risk_engine/`) criada no monorepo.
+*   **[DONE]** Dockerfile e requirements espelhando os padrões do Core.
+*   **[DONE]** Serviço `risk_engine` plugado no `docker-compose.yml` com healthcheck.
+*   **[DONE]** Variável `RISK_ENGINE_URL` injetada no ambiente do Core via `docker-compose.yml`.
+*   **[DONE]** Rota `POST /evaluate` com regra inicial (Amount > R$ 50k = DENY).
+*   **[DONE]** Rota `GET /health_check` do microsserviço.
+*   **[DONE]** `RiskEngineConnector` criado em `src/connectors/` seguindo o padrão arquitetural do Core.
+*   **[DONE]** `RiskEngineDenied` (erro `QIT009001`) registrado em `src/errors/custom_errors.py`.
+*   **[DONE]** `TransactionController` integrado ao conector (intercepta toda transação antes do débito).
+
+### Próximos Passos (Backlog Priorizado)
+
+*   **[TODO - Alta Prioridade]** Modelar e criar a tabela `RISK_PROFILE` no banco de dados do Risk Engine (campos: `customer_key`, `risk_score`, `reason`, `last_evaluated_at`).
+*   **[TODO - Alta Prioridade]** Refatorar o `POST /evaluate` para consultar o `risk_score` da tabela `RISK_PROFILE` em vez de usar a regra hardcoded de valor.
+*   **[TODO - Alta Prioridade]** Criar a rota interna `PATCH /risk_profile/{customer_key}` para o Worker LLM atualizar o score.
+*   **[TODO - Média Prioridade]** Construir o LLM Worker (`risk_engine/worker/llm_classifier.py`) usando a biblioteca `groq` para consumir a API gratuita.
+*   **[TODO - Média Prioridade]** Configurar o Cron Job do Worker (via `APScheduler` ou `cron` no Docker) para rodar a classificação a cada 6 horas.
+*   **[TODO - Baixa Prioridade]** Criar rota `GET /risk_profile/{customer_key}` para auditoria interna (visualizar o score atual de um cliente).
+*   **[TODO - Baixa Prioridade]** Escrever testes de integração para o conector (`test_risk_engine_connector.py`) cobrindo os cenários de APPROVE, DENY e Fail-Open.
