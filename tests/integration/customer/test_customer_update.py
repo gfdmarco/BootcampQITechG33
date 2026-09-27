@@ -1,5 +1,5 @@
 from tests.utils import PayloadGenerator, RequestGenerator
-
+from uuid import uuid4
 
 class TestCustomerUpdate:
     def _create_and_login_customer(self, prefix="update_test"):
@@ -20,16 +20,17 @@ class TestCustomerUpdate:
     def test_updates_customer_successfully(self):
         customer_key, access_token, _ = self._create_and_login_customer()
 
+        email = f"novo.{uuid4()}@exemplo.com.br"
         patch_payload = {
             "name": "Novo Nome Atualizado",
-            "email": "novo.email.atualizado@exemplo.com.br"
+            "email": email
         }
 
         status, response = RequestGenerator.PATCH_customer(customer_key, patch_payload, access_token)
 
         assert status == 200
         assert response["name"] == "Novo Nome Atualizado"
-        assert response["email"] == "novo.email.atualizado@exemplo.com.br"
+        assert response["email"] == email
 
     def test_forbids_updating_other_customer(self):
         # Cria dois clientes
