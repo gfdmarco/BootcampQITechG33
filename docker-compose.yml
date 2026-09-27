@@ -42,6 +42,8 @@ services:
       BANKSLIP_API_URL: ${BANKSLIP_API_URL:-http://localhost:8080}
       BANKSLIP_API_INTERNAL_TOKEN: ${BANKSLIP_API_INTERNAL_TOKEN:-default_token}
       BANKSLIP_API_TIMEOUT: ${BANKSLIP_API_TIMEOUT:-5}
+      RISK_ENGINE_URL: ${RISK_ENGINE_URL:-http://risk_engine:3000}
+
     volumes:
       # Monta o codigo pra dentro do container: salvou o arquivo,
       # a API recarrega sozinha (o --reload ali embaixo).
@@ -78,3 +80,21 @@ services:
       timeout: 3s
       retries: 20
 
+
+  risk_engine:
+    build:
+      context: ./risk_engine
+    ports:
+      - "${RISK_API_PORT:-8001}:3000"
+    environment:
+      APP_ENV: ${APP_ENV:-local}
+      SERVICE_NAME: ${SERVICE_NAME:-risk-engine}
+    volumes:
+      - ./risk_engine/src:/app
+    command: uvicorn app:app --host 0.0.0.0 --port 3000 --no-server-header --reload
+    healthcheck:
+      test: ["CMD-SHELL", "python -c 'import urllib.request; urllib.request.urlopen(\"http://localhost:3000/health_check\")'"]
+      interval: 3s
+      timeout: 5s
+      retries: 20
+      start_period: 5s
