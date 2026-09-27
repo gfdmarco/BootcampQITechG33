@@ -61,7 +61,7 @@ class TransactionResource:
             status_code=http_status.HTTP_200_OK,
         )
 
-    @SchemaHandler.validate_query_params("get_transactions.json")
+    @SchemaHandler.validate_query_params("get_transaction.json")
     def on_get_list(self, request: Request) -> JSONResponse:
         """A página pedida, com os filtros que vierem na query string.
 
