@@ -18,11 +18,11 @@ class TestAccountEndpoints:
         return customer_key, login_response["access_token"]
 
     def test_create_multiple_accounts(self):
-        """201; 5 contas têm 5 números diferentes no formato ^\d{8}-\d$. 6ª conta -> 422"""
+        """201; 3 contas têm 3 números diferentes no formato ^\d{8}-\d$. 4ª conta -> 422"""
         customer_key, access_token = self._create_and_login_customer()
 
         account_numbers = set()
-        for _ in range(5):
+        for _ in range(3):
             status, response = RequestGenerator.POST_customer_account(
                 customer_key,
                 {"type": "checking"},
@@ -36,9 +36,9 @@ class TestAccountEndpoints:
             assert re.match(r"^\d{8}-\d$", response["number"])
             account_numbers.add(response["number"])
             
-        assert len(account_numbers) == 5
+        assert len(account_numbers) == 3
 
-        # 6th account should fail with 422
+        # 4th account should fail with 422
         status, response = RequestGenerator.POST_customer_account(
             customer_key,
             {"type": "checking"},
@@ -144,3 +144,51 @@ class TestAccountEndpoints:
         account_keys = [acc["account_key"] for acc in list_response["items"]]
         assert alice_acc["account_key"] in account_keys
         assert bob_acc["account_key"] not in account_keys
+
+    def test_account_creation_success_and_failure_codes(self):
+        """
+        Garante que a criação com dados válidos retorna 201 e 
+        a criação com dados inválidos/incompletos retorna erros da família 4xx.
+        """
+        customer_key, access_token = self._create_and_login_customer()
+
+        # ---------------------------------------------------------
+        # TESTE 1: SUCESSO (Caminho Feliz)
+        # ---------------------------------------------------------
+        valid_payload = {"type": "checking"}
+        
+        # Executa o pedido POST para criar a conta
+        status_success, response_success = RequestGenerator.POST_customer_account(
+            customer_key,
+            valid_payload,
+            access_token
+        )
+        
+        # Valida que o código HTTP é 201 (Created) e que a resposta contém a account_key[cite: 12]
+        assert status_success == 201
+        assert "account_key" in response_success
+
+        # ---------------------------------------------------------
+        # TESTE 2: FALHA (Falta do campo obrigatório 'type')
+        # ---------------------------------------------------------
+        invalid_payload_empty = {}
+        
+        status_empty, _ = RequestGenerator.POST_customer_account(
+            customer_key,
+            invalid_payload_empty,
+            access_token
+        )
+        
+        assert status_empty in [400, 422]
+
+        # ---------------------------------------------------------
+        # TESTE 3: FALHA (Tipo de conta não suportado)
+        # ---------------------------------------------------------
+        invalid_payload_wrong_type = {"type": "crypto_wallet"}
+        
+        status_wrong_type, _ = RequestGenerator.POST_customer_account(
+            customer_key,
+            invalid_payload_wrong_type,
+            access_token
+        )
+        assert status_wrong_type in [400, 422]
