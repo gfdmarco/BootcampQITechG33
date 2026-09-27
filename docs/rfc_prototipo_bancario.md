@@ -236,7 +236,7 @@ O modelo de dados implementa proteções fundamentais para informações crític
 #### Rotas
 | MÉTODO | CAMINHO | O QUE FAZ | ENTRADA (CAMPOS QUE IMPORTAM) | SAÍDAS (STATUS E QUANDO) |
 | :--- | :--- | :--- | :--- | :--- |
-| **POST** | `/customers/{key}/accounts` | Abre nova conta no perfil do cliente | `type` (checking ou savings) | **201:** Conta criada.<br>**401:** Faltou JWT na requisição.<br>**403:** Tentou abrir conta no perfil de outro cliente.<br>**422:** Cliente já possui 3 contas ativas ou enviou tipo inválido. |
+| **POST** | `/customers/{key}/accounts` | Abre nova conta no perfil do cliente | `type` (checking ou savings) | **201:** Conta criada.<br>**401:** Faltou JWT na requisição.<br>**403:** Tentou abrir conta no perfil de outro cliente.<br>**422:** Cliente já possui 5 contas ativas ou enviou tipo inválido. |
 | **GET** | `/accounts` | Lista contas do próprio cliente (Idempotente) | *Sem payload.* (A identidade vem do Header `JWT`) | **200:** Lista retornada com sucesso (nunca exibe contas de terceiros). *(Idempotente pois requisições repetidas não alteram estado e retornam a mesma lista se não houverem novas aberturas)* |
 | **GET** | `/accounts/{key}` | Exibe detalhes de uma conta (Idempotente) | `key` (via Path) | **200:** Detalhes exibidos.<br>**403:** Conta não pertence ao cliente do JWT.<br>**404:** Conta inexistente.<br>*(Idempotente pois trata-se de leitura restrita)* |
 | **POST** | `/transactions` | Efetua transferência ou depósito | `type` (pix, ted, deposit), `amount`, `destination_account_key` | **201:** Transação efetivada.<br>**403:** Tentativa de débito em conta origem de outro cliente.<br>**422:** Saldo insuficiente, valor inválido ou conta destino bloqueada/inexistente. |
@@ -247,7 +247,7 @@ O modelo de dados implementa proteções fundamentais para informações crític
 #### Fluxos
 
 **1. Fluxo Lógico de Abertura de Conta**
-Este fluxo ilustra a regra de negócio para limitação de contas, avaliando o limite de 3 contas ativas por perfil:
+Este fluxo ilustra a regra de negócio para limitação de contas, avaliando o limite de 5 contas ativas por perfil:
 
 ```mermaid
 sequenceDiagram
@@ -262,9 +262,9 @@ sequenceDiagram
     end
     API->>DB: COUNT contas com status "ativo" do cliente
     DB-->>API: Total de contas ativas
-    alt Total >= 3
+    alt Total >= 5
         API-->>Cliente: 422 Unprocessable Entity (Limite atingido)
-    else Total < 3
+    else Total < 5
         API->>DB: INSERT Account (balance=0)
         API-->>Cliente: 201 Created
     end
