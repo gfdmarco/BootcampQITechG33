@@ -2,6 +2,7 @@ from uuid import uuid4
 
 from database import Context
 from models import Account, AccountStatus, AccountStatusEvent
+from sqlalchemy import or_
 
 class AccountRepository:
     def __init__(self, context: Context) -> None:
@@ -61,7 +62,7 @@ class AccountRepository:
             self.session.query(Account)
             .filter(Account.customer_id == customer_id)
             .join(Account.status)
-            .filter(AccountStatus.enumerator == AccountStatus.ACTIVE)
+            .filter(or_(AccountStatus.enumerator == AccountStatus.ACTIVE, AccountStatus.enumerator == AccountStatus.BLOCKED))
             .count()
         )
 
@@ -87,7 +88,35 @@ class AccountRepository:
         balance = filters.get("balance")
         if balance is not None:
             query = query.filter(Account.balance >= balance)
+
+        customer_id = filters.get("customer_id")
+        if customer_id is not None:
+            query = query.filter(Account.customer_id == customer_id)
     
         query = query.order_by(Account.created_at.desc(), Account.id.desc())
 
         return query.limit(limit + 1).offset(offset).all()
+
+    def debit(self, account_id: int, amount: int) -> bool:
+        """Desconta só se houver saldo. Devolve False se não havia."""
+        updated_rows = (
+            self.session.query(Account)
+            .filter(Account.id == account_id, Account.balance >= amount)
+            .update({Account.balance: Account.balance - amount}, synchronize_session="fetch")
+        )
+        return updated_rows == 1
+
+    def credit(self, account_id: int, amount: int) -> None:
+        (
+            self.session.query(Account)
+            .filter(Account.id == account_id)
+            .update({Account.balance: Account.balance + amount}, synchronize_session="fetch")
+        )
+
+    def list_by_customer(self, customer_id: int) -> list[Account]:
+        return (
+            self.session.query(Account)
+            .filter(Account.customer_id == customer_id)
+            .order_by(Account.id)
+            .all()
+        )

@@ -147,19 +147,8 @@ class NotFoundAccount(QIException):
         super().__init__(title, self.code, http_status, description, translation)
 
 
-class UnderageCustomer(QIException):
-    code = "QIT001012"
-
-    def __init__(self, age, minimum_age) -> None:
-        title = "Customer is underage"
-        http_status = 422
-        description = f"The customer is {age} years old, and the minimum is {minimum_age}."
-        translation = f"Para abrir uma conta é preciso ter pelo menos {minimum_age} anos."
-        super().__init__(title, self.code, http_status, description, translation)
-
-
 class NotFoundCustomer(QIException):
-    code = "QIT001013"
+    code = "QIT001012"
 
     def __init__(self, customer_key) -> None:
         title = "Customer not Found"
@@ -170,7 +159,7 @@ class NotFoundCustomer(QIException):
 
 
 class CustomerAccountLimitReached(QIException):
-    code = "QIT001014"
+    code = "QIT001013"
 
     def __init__(self) -> None:
         title = "Account Limit Reached"
@@ -186,7 +175,7 @@ class InsufficientBalance(QIException):
     Retorna 422 pois o formato está correto, mas a regra de negócio proíbe.
     """
 
-    code = "QIT001015"
+    code = "QIT001014"
 
     def __init__(self) -> None:
         title = "Insufficient Balance"
@@ -199,7 +188,7 @@ class InsufficientBalance(QIException):
 class InvalidTransactionType(QIException):
     """O tipo de transação enviado não é reconhecido pelo sistema."""
 
-    code = "QIT001016"
+    code = "QIT001015"
 
     def __init__(self, transaction_type) -> None:
         title = "Invalid Transaction Type"
@@ -209,7 +198,7 @@ class InvalidTransactionType(QIException):
         super().__init__(title, self.code, http_status, description, translation)
 
 class AccountInvalidStatusTransition(QIException):
-    code = "QIT001017"
+    code = "QIT001016"
 
     def __init__(self, old_status, new_status) -> None:
         title = "Invalid Account Status Transition"
@@ -220,7 +209,7 @@ class AccountInvalidStatusTransition(QIException):
 
 
 class AccountHasBalance(QIException):
-    code = "QIT001018"
+    code = "QIT001017"
 
     def __init__(self, account_key, balance) -> None:
         title = "Account Has Balance"
@@ -231,9 +220,9 @@ class AccountHasBalance(QIException):
 
 #ainda precisamos validar a numeracao do http_status (desconheco qual numero certinho vai na dezena e unidade)
 class InvalidAmount(QIException):
-    code = "QIT001019"
+    code = "QIT001018"
 
-    def ___init__(self, amount) -> None:
+    def __init__(self, amount) -> None:
         title = "Invalid Amount"
         http_status = 422
         description = f"The amount of {amount} required to credit or debit is invalid."
@@ -241,9 +230,9 @@ class InvalidAmount(QIException):
         super().__init__(title, self.code, http_status, description, translation)
 
 class AccountNumberGenerationFailed(QIException):
-    code = "QIT001020"
+    code = "QIT001019"
 
-    def ___init__(self) -> None:
+    def __init__(self) -> None:
         title = "Account Number Generation Failed"
         http_status = 422
         description = f"Couldn't generate an account number for this account."
@@ -253,7 +242,7 @@ class AccountNumberGenerationFailed(QIException):
 class NotFoundTransaction(QIException):
     """A transação buscada não existe na base de dados."""
     
-    code = "QIT001021"
+    code = "QIT001020"
 
     def __init__(self, transaction_key: str) -> None:
         title = "Transaction not Found"
@@ -266,7 +255,7 @@ class NotFoundTransaction(QIException):
 class OriginAccountRequired(QIException):
     """A requisição é uma transferência, mas a conta de origem não foi enviada."""
     
-    code = "QIT001022"
+    code = "QIT001021"
 
     def __init__(self) -> None:
         title = "Origin Account Required"
@@ -279,7 +268,7 @@ class OriginAccountRequired(QIException):
 class TransactionFinalStatus(QIException):
     """A transação já está num estado final (ex: confirmed, failed) e não pode ser alterada."""
     
-    code = "QIT001023"
+    code = "QIT001022"
 
     def __init__(self, old_status: str, new_status: str) -> None:
         title = "Invalid Transaction Status Transition"
@@ -287,6 +276,17 @@ class TransactionFinalStatus(QIException):
         description = f"Transaction with status {old_status} cannot update to {new_status}."
         translation = "O status desta transação não pode ser alterado pois ela já foi finalizada."
         super().__init__(title, self.code, http_status, description, translation)
+
+class CustomerHasBalance(QIException):
+    code = "QIT001023"
+
+    def __init__(self, customer_key) -> None:
+        title = "Customer Has Balance"
+        http_status = 409
+        description = f"Customer {customer_key} still has accounts with balance. Please transfer your money."
+        translation = "Não é possível encerrar o cadastro. Há saldo em alguma conta. Por favor, transfira seu dinheiro."
+        super().__init__(title, self.code, http_status, description, translation)
+
 # ──────────────────────────────────────────────────────────────────────────────
 # QIT002xxx — Domínio de Segurança (Autenticação e Autorização)
 # ──────────────────────────────────────────────────────────────────────────────

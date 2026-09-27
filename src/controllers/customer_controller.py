@@ -1,5 +1,6 @@
 from datetime import date
 from passlib.hash import bcrypt
+import secrets
 
 from controllers.base_controller import BaseController
 from dtos import CustomerDTO
@@ -11,9 +12,11 @@ from errors import (
     UnderageCustomer,
     NotFoundCustomer,
     ForbiddenAction,
-    AccountNumberGenerationFailed
+    AccountNumberGenerationFailed,
+    AccountInvalidStatusTransition,
+    CustomerHasBalance
 )
-from models import CustomerStatus
+from models import CustomerStatus, AccountStatus
 from repositories import CustomerRepository
 from repositories import AccountRepository
 from utils.document_number import is_valid_cpf
@@ -63,6 +66,7 @@ class CustomerController(BaseController):
         # para que status_events já apareça na resposta do POST.
         self.customer_repository.update_status(customer, CustomerStatus.CREATED)
 
+        self.session.flush()
         customer_dto = CustomerDTO.obj_to_dict(customer)
         self.session.commit()
 
@@ -100,9 +104,12 @@ class CustomerController(BaseController):
         account_controller = AccountController()
         return account_controller.open_account(customer.id, account_data)
 
-    def get_by_key(self, customer_key: str) -> dict:
+    def get_by_key(self, customer_key: str, caller_customer_key: str) -> dict:
+        if customer_key != caller_customer_key:
+            raise ForbiddenAction()
+        
         self.logger.debug(f"Buscando o customer de chave {customer_key}")
-
+        
         customer = self.customer_repository.get_by_key(customer_key)
 
         if customer is None:
@@ -110,7 +117,14 @@ class CustomerController(BaseController):
 
         return CustomerDTO.obj_to_dict(customer)
 
-    def get_list(self, limit: int, offset: int, filters: dict) -> dict:
+    def get_list(self, caller_customer_key: str, limit: int, offset: int, filters: dict) -> dict:
+        caller_customer = self.customer_repository.get_by_key(caller_customer_key)
+        
+        if caller_customer is None:
+            raise NotFoundCustomer(caller_customer_key)
+        
+        filters["customer_id"] = caller_customer.id
+
         self.logger.debug(f"Buscando lista de customers (limit={limit}, offset={offset})")
         
         customers = self.customer_repository.list_page(limit, offset, filters)
@@ -160,23 +174,40 @@ class CustomerController(BaseController):
         if customer is None:
             raise NotFoundCustomer(customer_key)
 
-        # Se já estiver cancelado, somos idempotentes
-        if customer.status.enumerator == CustomerStatus.FAILED:
-            return
+        if customer.status.enumerator != CustomerStatus.SUCCESS:
+            raise ForbiddenAction()
+
+        if customer is not None and customer.status.enumerator == CustomerStatus.FAILED:
+            customer = None   # cai no DUMMY_HASH e volta 401 igual aos outros
 
         # Deleção lógica e auditoria
         self.customer_repository.update_status(
             customer, 
             CustomerStatus.FAILED, 
-            reason="Customer requested account closure"
+            reason="Customer requested account closure."
         )
+
+        customer_accounts = self.account_repository.list_by_customer(customer.id)
+
+        #primeiro verifico se alguma conta tem saldo
+        for account in customer_accounts:
+            if account.balance > 0 and account.status.enumerator != AccountStatus.CLOSED:
+                raise CustomerHasBalance(customer_key)
+            
+        #agora podemos mexer de fato nos status
+        for account in customer_accounts:
+            if account.status.enumerator != AccountStatus.CLOSED:
+                self.account_repository.update_status(account, AccountStatus.CLOSED)
+
+        self.customer_repository.update_status(customer, CustomerStatus.FAILED, reason="Customer requested account closure"
+)
 
         # Anonimização LGPD (O CPF é mantido por compliance/Risco de fraude)
         customer.name = "DELETED_USER"
         customer.email = f"deleted_{customer.customer_key}@closed.invalid"
         
         # Invalida a senha para impedir qualquer tentativa futura de login
-        customer.password_hash = "DELETED"
+        customer.password_hash = bcrypt.hash(secrets.token_hex(16))
 
         self.session.commit()
 

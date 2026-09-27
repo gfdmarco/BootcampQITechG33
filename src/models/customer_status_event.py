@@ -13,11 +13,6 @@ class CustomerStatusEvent(Base):
     reason = Column(String(255), nullable=True)
     created_at = Column(DateTime, nullable=False, server_default=func.now())
 
-    customer = relationship(
-        "Customer",
-        foreign_keys=[customer_id],
-        back_populates="status_events",
-        lazy="selectin",
-    )
+    customer = relationship("Customer", foreign_keys=[customer_id], back_populates="status_events", lazy="selectin")
     from_status = relationship("CustomerStatus", foreign_keys=[from_status_id], lazy="selectin")
     to_status = relationship("CustomerStatus", foreign_keys=[to_status_id], lazy="selectin")

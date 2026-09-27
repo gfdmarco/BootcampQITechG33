@@ -9,12 +9,14 @@ from errors import (
     NotFoundTransaction,
     OriginAccountRequired,
     TransactionFinalStatus,
+    NotFoundCustomer
 )
-from models import Transaction, TransactionStatus
+from models import Transaction, TransactionStatus, CustomerStatus, AccountStatus
 from repositories import (
     AccountRepository,
     FeeRepository,
     TransactionRepository,
+    CustomerRepository
 )
 
 VALID_TRANSACTION_TYPES = ("deposit", "transfer")
@@ -33,6 +35,7 @@ class TransactionController(BaseController):
         self.transaction_repository = TransactionRepository(self.context)
         self.fee_repository = FeeRepository(self.context)
         self.account_repository = AccountRepository(self.context)
+        self.customer_repository = CustomerRepository(self.context)
 
     def process_transaction(self, payload: dict, authenticated_customer_key: str) -> dict:
         """
@@ -58,10 +61,19 @@ class TransactionController(BaseController):
         if transaction_type not in VALID_TRANSACTION_TYPES:
             raise InvalidTransactionType(transaction_type)
 
+        caller_customer = self.customer_repository.get_by_key(authenticated_customer_key)
+        if caller_customer is None:
+            raise NotFoundCustomer(authenticated_customer_key)
+        
+        if caller_customer.status.enumerator != CustomerStatus.SUCCESS:
+            raise ForbiddenAction()
+        
         # Busca pela chave pública — o controller nunca enxerga o `id`.
         destination_account = self.account_repository.get_by_key(destination_account_key)
         if destination_account is None:
             raise NotFoundAccount(destination_account_key)
+        if destination_account.sattus.enumerator != AccountStatus.ACTIVE:
+            raise ForbiddenAction()
 
         origin_account = None
         fee_amount = 0
@@ -69,7 +81,9 @@ class TransactionController(BaseController):
 
         if transaction_type == "deposit":
             # Depósito não tem origem nem tarifa.
-            self.account_repository.credit(destination_account_key, payload["amount"])
+            if destination_account.customer_id != caller_customer.id:
+                raise ForbiddenAction()
+            self.account_repository.credit(destination_account_key, authenticated_customer_key, payload["amount"])
 
         else:  # transfer
             origin_key = payload.get("origin_account_key")
@@ -79,6 +93,12 @@ class TransactionController(BaseController):
             origin_account = self.account_repository.get_by_key(origin_key)
             if origin_account is None:
                 raise NotFoundAccount(origin_key)
+            
+            if origin_account.status.enumerator != AccountStatus.ACTIVE:
+                raise ForbiddenAction()
+
+            if origin_account.id == destination_account.id:
+                raise InvalidParameter("Origin and Destination accounts cannot be the same.")
 
             # Comparação feita só entre chaves públicas, navegando pelo
             # relationship do ORM — nunca por `_id`.
@@ -91,15 +111,20 @@ class TransactionController(BaseController):
             # Se o modelo Fee guardar percentage com casas decimais,
             # ajuste esta conta para trabalhar em base inteira maior
             # (ex.: pontos-base) em vez de introduzir float aqui.
-            fee_amount = (payload["amount"] * fee_obj.percentage) // 100
-            total_debit = payload["amount"] + fee_amount
+            fee_amount = (int(payload["amount"]) * fee_obj.percentage) // 100
+            total_debit = int(payload["amount"]) + fee_amount
 
             # Débito atômico: ou desconta tudo, ou nada é gravado.
-            success = self.account_repository.debit(origin_key, total_debit)
-            if not success:
-                raise InsufficientBalance()
+            if origin_account.id < destination_account.id: 
+                #determinamos uma ordem para evitar deadlock e devolver erro 500
+                self.account_repository.debit(origin_key, authenticated_customer_key, total_debit)
+                self.account_repository.credit(destination_account_key, authenticated_customer_key, payload["amount"])
+            else:
+                #invertemos a ordem: sempre a conta com menor id trava primeiro ao alterar o saldo (decisão nossa)
+                self.account_repository.credit(destination_account_key, authenticated_customer_key, payload["amount"])
+                self.account_repository.debit(origin_key, authenticated_customer_key, total_debit)
 
-            self.account_repository.credit(destination_account_key, payload["amount"])
+
 
         transaction_data = {
             "origin_account": origin_account,
@@ -111,7 +136,6 @@ class TransactionController(BaseController):
             "channel": payload["channel"],
         }
 
-        
         transaction = self.transaction_repository.create_transaction(transaction_data)
 
         # PENDING -> CONFIRMED. Passa o ENUMERADOR (string), não o
@@ -122,6 +146,7 @@ class TransactionController(BaseController):
             reason=f"Operação de {transaction_type} realizada com sucesso",
         )
 
+        self.session.flush()
         # Passa pelo DTO antes do commit final.
         transaction_dto = TransactionDTO.only_obj_key(transaction)
 

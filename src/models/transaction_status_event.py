@@ -14,6 +14,6 @@ class TransactionStatusEvent(Base):
     reason = Column(String(255), nullable=True)
     created_at = Column(DateTime, nullable=False, server_default=func.now())
 
-    transaction = relationship("Transaction", foreign_keys=[transaction_id], lazy="selectin")
+    transaction = relationship("Transaction", foreign_keys=[transaction_id], back_populates="status_events", lazy="selectin")
     from_status = relationship("TransactionStatus", foreign_keys=[from_status_id], lazy="selectin")
     to_status = relationship("TransactionStatus", foreign_keys=[to_status_id], lazy="selectin")

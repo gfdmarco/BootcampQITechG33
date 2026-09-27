@@ -21,7 +21,7 @@ class AuthController(BaseController):
 
         customer = self.customer_repository.get_by_document_number(document_number)
 
-        dummy_hash = "$2b$12$KIXbGz6j6r1YzlTmv8h5oe7Yq8HZW9Z5M6uR5cR5cR5cR5cR5cR5"
+        dummy_hash = bcrypt.hash("senha-que-ninguem-usa")
         hash_to_check = customer.password_hash if customer else dummy_hash
 
         password_ok = bcrypt.verify(raw_password, hash_to_check)

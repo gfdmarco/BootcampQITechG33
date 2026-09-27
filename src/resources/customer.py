@@ -17,9 +17,9 @@ class CustomerResource:
             status_code=status.HTTP_201_CREATED,
         )
 
-    def on_get_by_key(self, customer_key: str) -> JSONResponse:
+    def on_get_by_key(self, customer_key: str, request: Request) -> JSONResponse:
         controller = CustomerController()
-        customer = controller.get_by_key(customer_key)
+        customer = controller.get_by_key(customer_key, request.state.customer_key)
 
         return JSONResponse(
             content=jsonable_encoder(customer),
@@ -43,7 +43,7 @@ class CustomerResource:
         }
 
         offset = page * limit
-        customers_page = controller.get_list(limit, offset, filters)
+        customers_page = controller.get_list(request.state.customer_key, limit, offset, filters)
 
         page_envelope = {
             "data": customers_page["customers_list_dto"],
@@ -89,5 +89,5 @@ class CustomerResource:
 
         return JSONResponse(
                 content=jsonable_encoder(account),
-                status_code=status.HTTP_204_NO_CONTENT,
+                status_code=status.HTTP_201_NO_CONTENT,
             )
