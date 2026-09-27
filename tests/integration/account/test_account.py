@@ -38,7 +38,7 @@ class TestAccountEndpoints:
             
         assert len(account_numbers) == 5
 
-        # 4th account should fail with 422
+        # 6th account should fail with 422
         status, response = RequestGenerator.POST_customer_account(
             customer_key,
             {"type": "checking"},
@@ -106,23 +106,10 @@ class TestAccountEndpoints:
         assert status == 200
         assert response["status"] == "active"
         
-        # Give alice some money to test close with balance (deposit bypass)
-        deposit_payload = {
-            "account_key": alice_acc_key,
-            "type": "deposit",
-            "amount": 100
-        }
-        RequestGenerator.POST_transaction(deposit_payload, alice_token)
-
-        # Alice tries to close with balance
-        status, response = RequestGenerator.PUT_account(
-            alice_acc_key,
-            {"status": "closed"},
-            alice_token
-        )
-        # We might not have money if deposit fails, but if it works it should be 409
-        if status == 409:
-            assert True
+        status, _ = RequestGenerator.POST_transaction(PayloadGenerator.deposit(alice_acc_key, 100), alice_token)
+        assert status == 201
+        status, response = RequestGenerator.PUT_account(alice_acc_key, {"status": "closed"}, alice_token)
+        assert status == 409
 
     def test_get_accounts_list(self):
         """GET /accounts: Lista só as contas do chamador. Nunca contém conta de outro cliente"""
@@ -179,7 +166,7 @@ class TestAccountEndpoints:
             access_token
         )
         
-        assert status_empty in [400, 422]
+        assert status_empty  == 400
 
         # ---------------------------------------------------------
         # TESTE 3: FALHA (Tipo de conta não suportado)
@@ -191,4 +178,4 @@ class TestAccountEndpoints:
             invalid_payload_wrong_type,
             access_token
         )
-        assert status_wrong_type in [400, 422]
+        assert status_wrong_type == 400

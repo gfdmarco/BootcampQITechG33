@@ -41,4 +41,4 @@ class TestCustomerAccountCreation:
             access_token
         )
 
-        assert status == 422
+        assert status == 400
