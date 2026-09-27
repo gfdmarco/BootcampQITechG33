@@ -8,8 +8,9 @@ from middlewares import (
     register_request_context_middleware,
     register_request_logger_middleware,
     register_session_manager_middleware,
+    register_jwt_middleware,
 )
-from resources import HealthCheckResource, SampleEntityResource
+from resources import HealthCheckResource, SampleEntityResource, CustomerResource, AccountResource, TransactionResource
 from utils.logger import setup_logging
 
 
@@ -101,6 +102,7 @@ def create_app() -> FastAPI:
     # a aplicação de dentro pra fora, então o ÚLTIMO registrado é o
     # PRIMEIRO a executar. Leia de baixo pra cima e o diagrama volta.
     register_session_manager_middleware(application)
+    register_jwt_middleware(application)
     register_internal_token_middleware(application)
     register_request_logger_middleware(application)
     register_request_context_middleware(application)
@@ -131,6 +133,112 @@ def create_app() -> FastAPI:
         health_check_resource.on_get_health_check,
         methods=["GET"]
     )
+
+    customer_resource = CustomerResource()
+    application.add_api_route(
+        "/customers",
+        customer_resource.on_post,
+        methods=["POST"],
+    )
+    application.add_api_route(
+        "/customers",
+        customer_resource.on_get_list,
+        methods=["GET"],
+    )
+    application.add_api_route(
+        "/customers/{customer_key}",
+        customer_resource.on_get_by_key,
+        methods=["GET"],
+    )
+    application.add_api_route(
+        "/customers/{customer_key}",
+        customer_resource.on_patch_by_key,
+        methods=["PATCH"],
+    )
+    application.add_api_route(
+        "/customers/{customer_key}",
+        customer_resource.on_delete_by_key,
+        methods=["DELETE"],
+    )
+
+    account_resource = AccountResource()
+    application.add_api_route(
+        "/customers/{customer_key}/accounts",
+        customer_resource.on_post_account,
+        methods=["POST"],
+    )
+
+    from resources.auth import AuthResource
+    auth_resource = AuthResource()
+    application.add_api_route(
+        "/auth/login",
+        auth_resource.on_post_login,
+        methods=["POST"],
+    )
+    application.add_api_route(
+        "/auth/refresh",
+        auth_resource.on_post_refresh,
+        methods=["POST"],
+    )
+    application.add_api_route(
+        "/auth/password",
+        auth_resource.on_put_password,
+        methods=["PUT"],
+    )
+
+    accounts_resource = AccountResource()
+
+    application.add_api_route(
+        "/accounts/{account_key}",
+        accounts_resource.on_get_by_key,
+        methods=["GET"],
+    )
+    application.add_api_route(
+        "/accounts/{account_key}/balance",
+        accounts_resource.on_get_balance,
+        methods=["GET"],
+    )
+    application.add_api_route(
+        "/accounts/{account_key}",
+        accounts_resource.on_put_by_key,
+        methods=["PUT"],
+    )
+    application.add_api_route(
+        "/accounts",
+        accounts_resource.on_get_list,
+        methods=["GET"],
+    )
+    application.add_api_route(
+        "/accounts/{account_key}/statement",
+        accounts_resource.on_get_statement,
+        methods=["GET"],
+    )
+
+# ────────────────────────────────────────────────────────────────
+    # Rotas de Transações
+    # ────────────────────────────────────────────────────────────────
+    transaction_resource = TransactionResource()
+
+    application.add_api_route(
+        "/transactions",
+        transaction_resource.on_post,
+        methods=["POST"],
+    )
+
+
+    application.add_api_route(
+        "/transactions/{transaction_key}",
+        transaction_resource.on_get_by_key,
+        methods=["GET"],
+    )
+
+    application.add_api_route(
+        "/transactions",
+        transaction_resource.on_get_list,
+        methods=["GET"],
+    )
+
+
 
     application.add_api_route(
         "/sample_entity",

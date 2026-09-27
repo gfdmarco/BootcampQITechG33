@@ -1,0 +1,12 @@
+{
+  "title": "PostAccounts",
+  "type": "object",
+  "properties": {
+    "account_type": {
+      "type": "string",
+      "enum": ["checking", "savings"]
+    }
+  },
+  "required": ["account_type"],
+  "additionalProperties": false
+}

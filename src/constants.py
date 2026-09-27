@@ -36,7 +36,19 @@ BYPASS_ENDPOINTS = [
     "/health_check",
 ]
 
-REQUIRED_VARIABLES = ["DATABASE_URL", "INTERNAL_TOKEN"]
+REQUIRED_VARIABLES = ["DATABASE_URL", "INTERNAL_TOKEN", "JWT_SECRET"]
+
+JWT_SECRET = os.environ.get("JWT_SECRET")
+JWT_ALGORITHM = "HS256"
+JWT_EXPIRATION_MINUTES = 15
+JWT_REFRESH_EXPIRATION_DAYS = 7
+
+# Rotas que não exigem o JWT (Access Token) no cabeçalho.
+JWT_PUBLIC_ENDPOINTS = [
+    ("/customers", "POST"),
+    ("/auth/login", "POST"),
+    ("/auth/refresh", "POST"),
+]
 
 
 def check_variables():

@@ -1,0 +1,28 @@
+{
+    "title": "GetCustomers",
+    "type": "object",
+    "properties": {
+        "limit": {
+            "type": "string",
+            "pattern": "^\\d+$"
+        },
+        "page": {
+            "type": "string",
+            "pattern": "^\\d+$"
+        },
+        "name": {
+            "type": "string"
+        },
+        "email": {
+            "type": "string"
+        },
+        "document_number": {
+            "type": "string"
+        },
+        "status": {
+            "type": ["string", "array"],
+            "items": { "type": "string" }
+        }
+    },
+    "additionalProperties": false
+}

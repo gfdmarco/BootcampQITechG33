@@ -1,0 +1,14 @@
+{
+    "title": "PostAuthRefresh",
+    "type": "object",
+    "properties": {
+        "refresh_token": {
+            "type": "string",
+            "minLength": 1
+        }
+    },
+    "required": [
+        "refresh_token"
+    ],
+    "additionalProperties": false
+}
