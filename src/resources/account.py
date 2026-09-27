@@ -11,18 +11,18 @@ DEFAULT_PAGE = 0
 
 
 class AccountResource:
-    def on_get_by_key(self, account_key: str) -> JSONResponse:
+    def on_get_by_key(self, account_key: str, request: Request) -> JSONResponse:
         controller = AccountController()
-        account = controller.get_by_key(account_key)
+        account = controller.get_by_key(account_key, request.state.customer_key)
 
         return JSONResponse(
             content=jsonable_encoder(account),
             status_code=http_status.HTTP_200_OK,
         )
 
-    def on_get_balance(self, account_key: str, customer_key: str) -> JSONResponse:
+    def on_get_balance(self, account_key: str, request: Request) -> JSONResponse:
         controller = AccountController()
-        balance = controller.get_balance(customer_key, account_key)
+        balance = controller.get_balance(account_key, request.state.customer_key)
 
         return JSONResponse(
             content=jsonable_encoder({"balance": balance}),
@@ -30,9 +30,9 @@ class AccountResource:
         )
 
     @SchemaHandler.validate("put_accounts.json")
-    def on_put_by_key(self, account_key: str, payload: dict) -> JSONResponse:
+    def on_put_by_key(self, account_key: str, payload: dict, request: Request) -> JSONResponse:
         controller = AccountController()
-        account = controller.update_status(account_key, payload["status"])
+        account = controller.update_status(account_key, payload["status"], request.state.customer_key)
 
         return JSONResponse(
             content=jsonable_encoder(account),
@@ -58,7 +58,7 @@ class AccountResource:
         }
 
         offset = page * limit
-        accounts_page = controller.get_list(limit, offset, filters)
+        accounts_page = controller.get_list(limit, offset, filters, request.state.customer_key)
 
         page_envelope = {
             "data": accounts_page["account_list_dto"],
@@ -73,7 +73,7 @@ class AccountResource:
         )
 
     @SchemaHandler.validate_query_params("get_accounts_statement.json")
-    def on_get_statement(self, request: Request, customer_key: str) -> JSONResponse:
+    def on_get_statement(self, account_key: str, request: Request) -> JSONResponse:
         controller = AccountController()
         query_params = request.query_params
 
@@ -81,13 +81,12 @@ class AccountResource:
         page = int(query_params.get("page", DEFAULT_PAGE))
 
         filters = {
-            "account_key": query_params.get("account_key"),
             "date_from": query_params.get("date_from"),
             "date_to": query_params.get("date_to"),
         }
 
         offset = page * limit
-        statement_page = controller.get_statement(customer_key, limit, offset, filters)
+        statement_page = controller.get_statement(account_key, request.state.customer_key, limit, offset, filters)
 
         page_envelope = {
             "data": statement_page["transaction_list_dto"],

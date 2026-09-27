@@ -14,6 +14,6 @@ class AccountStatusEvent(Base):
     reason = Column(String(255), nullable=True)
     created_at = Column(DateTime, nullable=False, server_default=func.now())
 
-    account = relationship("Account", foreign_keys=[account_id], lazy="selectin")
+    account = relationship("Account", foreign_keys=[account_id], back_populates="status_events", lazy="selectin")
     from_status = relationship("AccountStatus", foreign_keys=[from_status_id], lazy="selectin")
     to_status = relationship("AccountStatus", foreign_keys=[to_status_id], lazy="selectin")

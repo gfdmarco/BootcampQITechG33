@@ -3,6 +3,8 @@ from uuid import uuid4
 from database import Context
 from models import Account, Transaction, TransactionStatus, TransactionStatusEvent
 
+from sqlalchemy import func, or_
+
 
 class TransactionRepository:
     """A camada que fala com o banco. Só aqui existe query.
@@ -132,6 +134,19 @@ class TransactionRepository:
         if channel is not None:
             query = query.filter(Transaction.channel == channel)
 
+        account_id = filters.get("account_id")
+        if account_id is not None:
+            query = query.filter(or_(Transaction.origin_account_id == account_id, 
+                                     Transaction.destination_account_id == account_id))
+
+        date_from = filters.get("date_from")
+        if date_from is not None:
+            query = query.filter(func.date(Transaction.created_at) >= date_from)
+
+        date_to = filters.get("date_to")
+        if date_to is not None:
+            query = query.filter(func.date(Transaction.created_at) <= date_to)
+        
         query = query.order_by(Transaction.created_at.desc(), Transaction.id.desc())
 
         return query.limit(limit + 1).offset(offset).all()

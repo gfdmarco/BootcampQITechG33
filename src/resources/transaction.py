@@ -63,21 +63,8 @@ class TransactionResource:
 
     @SchemaHandler.validate_query_params("get_transaction.json")
     def on_get_list(self, request: Request) -> JSONResponse:
-        """A página pedida, com os filtros que vierem na query string.
-
-        Mesmo mecanismo do `on_get_list` da Sample Entity: o decorator
-        já conferiu o FORMATO contra get_transactions.json antes desta
-        primeira linha rodar. O que o schema não sabe — se a conta
-        filtrada pertence a quem está pedindo — é decidido lá no
-        controller, não aqui.
-
-        Nota: o `context.md` do projeto diz que o extrato paginado deve
-        viver dentro do `ContaController`/`conta_resource`, não aqui.
-        Este endpoint fica como listagem geral de transações (útil
-        para outros usos); se a intenção for exclusivamente o extrato
-        de uma conta, prefira o endpoint de extrato do Resource de
-        Conta e considere remover este método.
-        """
+        """A página pedida, com os filtros que vierem na query string."""
+        
         controller = TransactionController()
         authenticated_customer_key = request.state.customer_key
 
