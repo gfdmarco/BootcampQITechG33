@@ -50,3 +50,14 @@ class RiskResource:
             return JSONResponse(status_code=e.status_code, content={
                 "error_code": e.error_code, "message": e.message
             })
+
+    async def on_get_profile_list(self, request: Request) -> JSONResponse:
+        """Lista todos os perfis — usada pelo LLM Worker para descobrir clientes."""
+        try:
+            controller = RiskController(request.state.context)
+            profiles   = controller.list_profiles()
+            return JSONResponse(status_code=200, content={"profiles": profiles})
+        except RiskAPIError as e:
+            return JSONResponse(status_code=e.status_code, content={
+                "error_code": e.error_code, "message": e.message
+            })

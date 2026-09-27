@@ -1,4 +1,4 @@
-# Imagem oficial e publica do Python. Qualquer pessoa consegue baixar.
+# Imagem base compartilhada entre API e Worker — mesmas dependências, mesmo Python.
 FROM python:3.11-slim AS base
 
 # Roda a aplicacao com um usuario sem privilegios, nunca como root.
@@ -15,12 +15,17 @@ RUN pip install --upgrade pip && pip install -r /requirements.txt
 
 WORKDIR /app
 COPY src /app
+COPY worker /app/worker
 
+# ── Target: API (FastAPI / uvicorn) ──────────────────────────────────────────
 FROM base AS api
 RUN chown -R user /app
 USER user
-
-# --no-server-header: o uvicorn nao anuncia a propria versao, que e
-# informacao de menos pra quem procura uma versao com falha conhecida.
 CMD uvicorn app:app --host 0.0.0.0 --port 3000 --no-server-header
 
+# ── Target: Worker (APScheduler / LLM Classifier) ────────────────────────────
+FROM base AS worker
+RUN chown -R user /app
+USER user
+# Roda o scheduler bloqueante — fica vivo enquanto o container existir
+CMD python -m worker.scheduler

@@ -28,3 +28,9 @@ PyJWT==2.8.0
 
 # Cache distribuído — leitura de score de risco e escrita pelo LLM Worker
 redis==5.0.8
+
+# LLM Worker — Groq API (Llama 3) para classificação de risco assíncrona
+groq==0.9.0
+
+# Scheduler para o Cron Job do Worker
+APScheduler==3.10.4

@@ -1,8 +1,17 @@
+import os
+import redis
+
 from database import Context
 from dtos import EvaluationDTO, RiskProfileDTO
 from errors import TransactionDeniedByRisk, ProfileNotFound, InvalidScoreValue
 from models import RiskScoreStatus
 from repositories import RiskRepository
+
+RISK_SCORE_TTL = 6 * 60 * 60  # 6h — alinhado ao ciclo do LLM Worker
+
+def _get_redis():
+    url = os.getenv("REDIS_URL", "redis://redis:6379/0")
+    return redis.from_url(url, decode_responses=True)
 
 
 VALID_SCORES = {RiskScoreStatus.LOW, RiskScoreStatus.MEDIUM, RiskScoreStatus.HIGH, RiskScoreStatus.UNKNOWN}
@@ -45,11 +54,20 @@ class RiskController:
         """
         Atualiza o perfil de risco de um cliente.
         Chamado exclusivamente pelo LLM Worker via PATCH /risk_profile/{key}.
+        Persiste no banco E atualiza o Redis para que o Core leia o score fresco.
         """
         if score not in VALID_SCORES:
             raise InvalidScoreValue(score)
 
         profile = self.repository.upsert_profile(customer_key, score, reason)
+
+        # Mantém o Redis em sincronia — evita que o Core leia score desatualizado
+        try:
+            r = _get_redis()
+            r.set(f"risk:{customer_key}", score, ex=RISK_SCORE_TTL)
+        except Exception:
+            pass  # Fail-Open: banco atualizado, cache tentará na próxima leitura
+
         return RiskProfileDTO.to_dict(profile)
 
     def get_profile(self, customer_key: str) -> dict:
@@ -58,3 +76,9 @@ class RiskController:
         if profile is None:
             raise ProfileNotFound(customer_key)
         return RiskProfileDTO.to_dict(profile)
+
+    def list_profiles(self) -> list[dict]:
+        """Lista todos os perfis para o LLM Worker descobrir quais clientes avaliar."""
+        from dtos import RiskProfileDTO
+        profiles = self.repository.list_all_profiles()
+        return [RiskProfileDTO.to_dict(p) for p in profiles]

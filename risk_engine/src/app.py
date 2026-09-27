@@ -43,6 +43,7 @@ def create_app() -> FastAPI:
     application.add_api_route("/evaluate",                        risk_resource.on_post_evaluate,  methods=["POST"])
     application.add_api_route("/risk_profile/{customer_key}",     risk_resource.on_patch_profile,  methods=["PATCH"])
     application.add_api_route("/risk_profile/{customer_key}",     risk_resource.on_get_profile,    methods=["GET"])
+    application.add_api_route("/risk_profile",                         risk_resource.on_get_profile_list, methods=["GET"])
 
     return application
 

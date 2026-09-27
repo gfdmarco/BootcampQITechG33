@@ -42,3 +42,12 @@ class RiskRepository:
         self.session.commit()
         self.session.refresh(profile)
         return profile
+
+    def list_all_profiles(self) -> list:
+        """Retorna todos os perfis ordenados pelo mais antigo (para reavaliar primeiro)."""
+        from models import RiskProfile
+        return (
+            self.session.query(RiskProfile)
+            .order_by(RiskProfile.last_evaluated_at.asc())
+            .all()
+        )
