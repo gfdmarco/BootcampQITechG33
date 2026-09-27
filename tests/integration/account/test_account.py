@@ -18,11 +18,11 @@ class TestAccountEndpoints:
         return customer_key, login_response["access_token"]
 
     def test_create_multiple_accounts(self):
-        """201; 3 contas têm 3 números diferentes no formato ^\d{8}-\d$. 4ª conta -> 422"""
+        """201; 5 contas têm 5 números diferentes no formato ^\d{8}-\d$. 6ª conta -> 422"""
         customer_key, access_token = self._create_and_login_customer()
 
         account_numbers = set()
-        for _ in range(3):
+        for _ in range(5):
             status, response = RequestGenerator.POST_customer_account(
                 customer_key,
                 {"type": "checking"},
@@ -36,7 +36,7 @@ class TestAccountEndpoints:
             assert re.match(r"^\d{8}-\d$", response["number"])
             account_numbers.add(response["number"])
             
-        assert len(account_numbers) == 3
+        assert len(account_numbers) == 5
 
         # 4th account should fail with 422
         status, response = RequestGenerator.POST_customer_account(
