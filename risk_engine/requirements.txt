@@ -25,3 +25,6 @@ passlib[bcrypt]==1.7.4
 bcrypt==4.0.1
 
 PyJWT==2.8.0
+
+# Cache distribuído — leitura de score de risco e escrita pelo LLM Worker
+redis==5.0.8

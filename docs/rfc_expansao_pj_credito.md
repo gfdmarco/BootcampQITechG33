@@ -180,6 +180,63 @@ sequenceDiagram
     Histórico: {transaction_summary}
     ```
 
+
+---
+
+## ⚡ CAMADA TRANSVERSAL: Redis como Read Model e Cache Distribuído
+
+O Redis não é uma feature isolada — é uma **infraestrutura compartilhada** que melhora a performance e o desacoplamento de múltiplos módulos ao mesmo tempo. Uma única instância serve toda a stack.
+
+### Casos de uso mapeados para ESTE projeto
+
+#### 1. Score de Risco (Read Model — Risk Engine)
+O uso primário que motivou a adoção. O LLM Worker calcula o score do cliente e escreve no Redis. O Core lê diretamente do cache, eliminando o HTTP síncrono ao Risk Engine no caminho da transação.
+
+```mermaid
+flowchart LR
+    Worker["LLM Worker
+(a cada 6h)"] -->|"SET risk:{key} HIGH EX 21600"| Redis
+    Core["Core API
+TransactionController"] -->|"GET risk:{key} < 1ms"| Redis
+    Redis -->|"score: HIGH"| Core
+    Core -->|"DENY ou APPROVE"| Cliente
+```
+
+*   **Chave:** `risk:{customer_key}` (ex: `risk:a1b2c3d4-...`)
+*   **TTL:** 6 horas (expira junto com o próximo ciclo do Worker)
+*   **Fallback:** Se a chave expirou ou o Redis estiver fora, o Core consulta o Risk Engine via HTTP como hoje (degradação graciosa).
+
+#### 2. Rate Limiting / Anti-Abuso (Core Bancário)
+Controla quantas requisições um mesmo cliente pode fazer por janela de tempo, prevenindo abuso de endpoints críticos como `POST /auth/login` (brute-force de senha).
+
+*   **Chave:** `rate:{endpoint}:{customer_key}` com TTL de 60s
+*   **Valor:** contador atômico via `INCR` do Redis
+*   **Lógica:** Se `INCR` retornar > 5 para `rate:login:{ip}`, a API retorna `429 Too Many Requests` sem nem checar o banco.
+
+#### 3. Cache de Sessão / Blacklist de JWT (Auth)
+Permite invalidar tokens JWT instantaneamente (ex: após troca de senha ou logout). Como JWT é stateless por definição, sem um blacklist externo é impossível revogar um token antes de expirar.
+
+*   **Chave:** `blacklist:{jti}` (onde `jti` é o ID único do token)
+*   **TTL:** Igual ao tempo de expiração restante do token
+*   **Lógica:** O middleware JWT, após verificar a assinatura, checa se o `jti` existe no Redis. Se sim, rejeita com `401`.
+
+#### 4. Cache de Tarifas (Fee Policy)
+A tabela `FEE` raramente muda, mas é consultada em toda transferência. Um cache evita um `SELECT` ao banco para cada PIX feito.
+
+*   **Chave:** `fee:{channel}` (ex: `fee:pix`, `fee:ted`)
+*   **TTL:** 1 hora (tempo suficiente para refletir qualquer mudança tarifária)
+
+### Infraestrutura
+
+Um único container Redis compartilhado por toda a stack. Cada módulo usa um **prefixo de namespace** nas chaves para evitar colisões:
+
+| Módulo         | Prefixo         | Exemplo                          |
+| :------------- | :-------------- | :------------------------------- |
+| Risk Engine    | `risk:`         | `risk:a1b2c3d4`                  |
+| Rate Limiting  | `rate:`         | `rate:login:192.168.0.1`         |
+| JWT Blacklist  | `blacklist:`    | `blacklist:jti-uuid-do-token`    |
+| Fee Cache      | `fee:`          | `fee:pix`                        |
+
 ---
 
 ## 📋 STATUS DE IMPLEMENTAÇÃO DO RISK ENGINE

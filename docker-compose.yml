@@ -43,6 +43,7 @@ services:
       BANKSLIP_API_INTERNAL_TOKEN: ${BANKSLIP_API_INTERNAL_TOKEN:-default_token}
       BANKSLIP_API_TIMEOUT: ${BANKSLIP_API_TIMEOUT:-5}
       RISK_ENGINE_URL: ${RISK_ENGINE_URL:-http://risk_engine:3000}
+      REDIS_URL: ${REDIS_URL:-redis://redis:6379/0}
 
     volumes:
       # Monta o codigo pra dentro do container: salvou o arquivo,
@@ -62,6 +63,8 @@ services:
       start_period: 5s
     depends_on:
       db:
+        condition: service_healthy
+      redis:
         condition: service_healthy
 
   db:
@@ -89,6 +92,10 @@ services:
     environment:
       APP_ENV: ${APP_ENV:-local}
       SERVICE_NAME: ${SERVICE_NAME:-risk-engine}
+      # Dentro do compose, o banco de risco atende por "db_risk" — nao por localhost.
+      DATABASE_URL: postgresql+psycopg2://risk:risk@db_risk:5432/risk
+      INTERNAL_TOKEN: ${RISK_INTERNAL_TOKEN:-risk_default_token}
+      REDIS_URL: ${REDIS_URL:-redis://redis:6379/0}
     volumes:
       - ./risk_engine/src:/app
     command: uvicorn app:app --host 0.0.0.0 --port 3000 --no-server-header --reload
@@ -98,3 +105,38 @@ services:
       timeout: 5s
       retries: 20
       start_period: 5s
+    depends_on:
+      db_risk:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+
+  db_risk:
+    # Banco exclusivo do microsservico de risco — isolado do Core bancario.
+    # Espelha o padrao do servico "db" principal.
+    build: ./risk_engine/database/.
+    environment:
+      POSTGRES_USER: risk
+      POSTGRES_PASSWORD: risk
+      POSTGRES_DB: risk
+    ports:
+      # RISK_DB_PORT=5433 no .env se a 5432 estiver ocupada.
+      - "${RISK_DB_PORT:-5433}:5432"
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U risk -d risk"]
+      interval: 3s
+      timeout: 3s
+      retries: 20
+
+  redis:
+    # Cache distribuído compartilhado por toda a stack.
+    # Cada módulo usa um prefixo de namespace para evitar colisões de chave
+    # (risk:, rate:, blacklist:, fee:).
+    image: redis:7-alpine
+    ports:
+      - "${REDIS_PORT:-6379}:6379"
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 3s
+      timeout: 3s
+      retries: 20
