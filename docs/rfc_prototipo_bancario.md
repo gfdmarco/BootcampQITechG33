@@ -26,43 +26,118 @@ A solução foi construída utilizando **Python com FastAPI, SQLAlchemy (ORM) e 
 
 * `<Controle de saldo em memória / Python>` — Descartada porque causaria *Race Conditions* e deixaria saldos inconsistentes em um ambiente de concorrência real. Ganharia se a API fosse um sistema monolítico bloqueante operando em *single-thread*.
 
+```mermaid
+flowchart LR
+    Cliente["🧑 Cliente HTTP"]
+
+    subgraph Docker ["Docker Compose"]
+        API["⚡ FastAPI
+Python 3
+Middleware JWT"]
+        DB["🐘 PostgreSQL
+Transações ACID
+Check Constraints"]
+    end
+
+    Cliente -->|"HTTPS Request
+Bearer Token"| API
+    API -->|"SQLAlchemy ORM
+SELECT / INSERT / UPDATE"| DB
+    DB -->|"Linhas + Status"| API
+    API -->|"JSON Response"| Cliente
+```
+
 ### Banco de Dados (Somente diagrama)
-*(Nesta seção, crie o modelo completo de entidades. Foco no que garante unicidade e guarda o estado.)*
+*(Diagrama fiel ao modelo implementado no código. Tipos, restrições e relacionamentos refletem diretamente os modelos SQLAlchemy do projeto.)*
 
 ```mermaid
 erDiagram
     CUSTOMER {
-        uuid id PK
-        string document_number UK
-        string email UK
-        string password_hash
-        string status
+        int id PK "SERIAL - interno"
+        char customer_key UK "CHAR-36 - UUID público"
+        string name "VARCHAR-255"
+        char document_number UK "CHAR-14 - CPF único"
+        string email UK "VARCHAR-255 único"
+        string password_hash "VARCHAR-255 - nunca texto plano"
+        date birth_date
+        int status_id FK
     }
-    ACCOUNT {
-        uuid id PK
-        uuid customer_id FK
-        string number UK
-        decimal balance
-        string status
-        string type
+    CUSTOMER_STATUS {
+        int id PK
+        string enumerator UK "created, pending, success, failed"
     }
-    TRANSACTION {
-        uuid id PK
-        uuid origin_account_id FK
-        uuid destination_account_id FK
-        decimal amount
-        string type
+    CUSTOMER_STATUS_EVENT {
+        int id PK
+        int customer_id FK
+        int status_id FK
         datetime created_at
     }
+
+    ACCOUNT {
+        int id PK "SERIAL - interno"
+        char account_key UK "CHAR-36 - UUID público"
+        int customer_id FK
+        string branch "VARCHAR-10"
+        string number UK "branch+number únicos"
+        string type "VARCHAR-20 checking ou savings"
+        bigint balance "Em centavos. CHECK maior ou igual a 0"
+        int status_id FK
+    }
+    ACCOUNT_STATUS {
+        int id PK
+        string enumerator UK "active, blocked, closed"
+    }
+    ACCOUNT_STATUS_EVENT {
+        int id PK
+        int account_id FK
+        int status_id FK
+        datetime created_at
+    }
+
+    TRANSACTION {
+        int id PK "SERIAL - interno"
+        char transaction_key UK "CHAR-36 - UUID público"
+        int origin_account_id FK "NULL para depósito"
+        int destination_account_id FK
+        bigint amount "Em centavos"
+        bigint fee_amount "Em centavos. Default 0"
+        int fee_id FK
+        string type "deposit ou transfer"
+        string channel "pix, ted, card, international"
+        int status_id FK
+    }
+    TRANSACTION_STATUS {
+        int id PK
+        string enumerator UK "pending, confirmed, failed"
+    }
+    TRANSACTION_STATUS_EVENT {
+        int id PK
+        int transaction_id FK
+        int status_id FK
+        datetime created_at
+    }
+
     FEE {
-        uuid id PK
-        uuid transaction_id FK
-        decimal fee_amount
+        int id PK
+        string type UK "pix, ted, card, international"
+        numeric percentage "NUMERIC-5-2 ex: 5.00 ou 8.00"
     }
 
     CUSTOMER ||--o{ ACCOUNT : "possui"
-    ACCOUNT ||--o{ TRANSACTION : "envia / recebe"
-    TRANSACTION ||--o| FEE : "gera tarifa"
+    CUSTOMER }o--|| CUSTOMER_STATUS : "tem status"
+    CUSTOMER ||--o{ CUSTOMER_STATUS_EVENT : "registra transição"
+    CUSTOMER_STATUS_EVENT }o--|| CUSTOMER_STATUS : "mapeia para"
+
+    ACCOUNT }o--|| ACCOUNT_STATUS : "tem status"
+    ACCOUNT ||--o{ ACCOUNT_STATUS_EVENT : "registra transição"
+    ACCOUNT_STATUS_EVENT }o--|| ACCOUNT_STATUS : "mapeia para"
+
+    ACCOUNT ||--o{ TRANSACTION : "envia"
+    ACCOUNT ||--o{ TRANSACTION : "recebe"
+    TRANSACTION }o--|| TRANSACTION_STATUS : "tem status"
+    TRANSACTION ||--o{ TRANSACTION_STATUS_EVENT : "registra transição"
+    TRANSACTION_STATUS_EVENT }o--|| TRANSACTION_STATUS : "mapeia para"
+    TRANSACTION }o--o| FEE : "usa tabela de tarifas"
 ```
 ### Decisões de Modelagem e Padrões de Banco de Dados
 
@@ -123,8 +198,29 @@ erDiagram
 ```
 #### 4. Máquina de Estados (Ciclo de Vida das Entidades)
 Para refletir fielmente o domínio bancário, as entidades principais possuem um ciclo de vida restrito, controlado por campos de `status` no banco de dados[cite: 2]:
-* **Conta (`ACCOUNT.status`):** Uma conta só pode enviar ou receber fundos se estiver **ativa**[cite: 2]. Contas com status **inativo, bloqueado ou encerrado** são rejeitadas imediatamente na camada de validação de negócios[cite: 2].
-* **Transação (`TRANSACTION_STATUS`):** O ciclo de uma transação transita por estados padronizados. Toda transação nasce como **'pending'** e só avança para **'confirmed'** após o sucesso da execução atômica do banco de dados[cite: 2]. Falhas de saldo ou regras de negócio resultam em **'failed'** ou status de erro análogo.
+* **Conta (`ACCOUNT.status`):** Uma conta só pode enviar ou receber fundos se estiver **ativa**[cite: 2]. Contas com status **bloqueado ou encerrado** são rejeitadas imediatamente na camada de validação de negócios[cite: 2].
+* **Transação (`TRANSACTION_STATUS`):** O ciclo de uma transação transita por estados padronizados. Toda transação nasce como **'pending'** e só avança para **'confirmed'** após o sucesso da execução atômica do banco de dados[cite: 2]. Falhas de saldo ou regras de negócio resultam em **'failed'**[cite: 2].
+
+```mermaid
+stateDiagram-v2
+    direction LR
+    [*] --> active : Conta criada
+    active --> blocked : Bloqueio manual
+    blocked --> active : Desbloqueio
+    active --> closed : Encerramento com saldo zero
+    blocked --> closed : Encerramento com saldo zero
+    closed --> [*]
+```
+
+```mermaid
+stateDiagram-v2
+    direction LR
+    [*] --> pending : Transação iniciada
+    pending --> confirmed : COMMIT com sucesso
+    pending --> failed : ROLLBACK por saldo insuficiente
+    confirmed --> [*]
+    failed --> [*]
+```
 
 #### 5. Segurança e Dados Sensíveis
 O modelo de dados implementa proteções fundamentais para informações críticas:
