@@ -1,26 +1,50 @@
+import os
 from fastapi import FastAPI, Request
 from fastapi.responses import JSONResponse
 
-app = FastAPI(title="Risk Engine API", description="Módulo isolado de análise antifraude")
+from database import open_context, clear_context
+from resources import RiskResource
 
-@app.post("/evaluate")
-async def evaluate_transaction(request: Request):
-    payload = await request.json()
-    
-    amount = payload.get("amount", 0)
-    
-    # Regra mockada super simples para testes iniciais
-    # Se passar de R$ 50.000,00 (5.000.000 de centavos), nós bloqueamos!
-    if amount > 5000000:
-        return JSONResponse(status_code=200, content={
-            "action": "DENY",
-            "reason": "HIGH_AMOUNT_RISK"
-        })
-        
-    return JSONResponse(status_code=200, content={
-        "action": "APPROVE"
-    })
+INTERNAL_TOKEN = os.getenv("INTERNAL_TOKEN", "risk_default_token")
+BYPASS_ENDPOINTS = {"/health_check", "/"}
 
-@app.get("/health_check")
-def health_check():
-    return JSONResponse(status_code=200, content={"status": "ok"})
+
+def create_app() -> FastAPI:
+    application = FastAPI(
+        title="Risk Engine API",
+        description="Módulo isolado de análise antifraude e gestão de risco."
+    )
+
+    # ── Middlewares (lidos de baixo pra cima — último registrado, primeiro a rodar) ──
+    @application.middleware("http")
+    async def session_middleware(request: Request, call_next):
+        context = open_context()
+        request.state.context = context
+        try:
+            response = await call_next(request)
+        finally:
+            if context.db_session:
+                context.db_session.close()
+            clear_context()
+        return response
+
+    @application.middleware("http")
+    async def internal_token_middleware(request: Request, call_next):
+        if request.url.path in BYPASS_ENDPOINTS or request.method == "OPTIONS":
+            return await call_next(request)
+        if request.headers.get("INTERNAL-TOKEN") != INTERNAL_TOKEN:
+            return JSONResponse(status_code=403, content={"error": "Forbidden"})
+        return await call_next(request)
+
+    # ── Rotas — o endereço, o verbo, e quem atende ──
+    risk_resource = RiskResource()
+
+    application.add_api_route("/health_check", lambda: {"status": "ok"}, methods=["GET"])
+    application.add_api_route("/evaluate",                        risk_resource.on_post_evaluate,  methods=["POST"])
+    application.add_api_route("/risk_profile/{customer_key}",     risk_resource.on_patch_profile,  methods=["PATCH"])
+    application.add_api_route("/risk_profile/{customer_key}",     risk_resource.on_get_profile,    methods=["GET"])
+
+    return application
+
+
+app = create_app()
