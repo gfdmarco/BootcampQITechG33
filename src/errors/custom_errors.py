@@ -334,10 +334,12 @@ class ForbiddenAction(QIException):
         translation = "Você não tem permissão para acessar ou modificar este recurso."
         super().__init__(title, self.code, http_status, description, translation)
 
-class RiskEngineDenied(APIError):
-    def __init__(self, reason: str):
-        super().__init__(
-            status_code=403,
-            error_code="QIT009001",
-            message=f"Transaction denied by Anti-Fraud Risk Engine: {reason}"
-        )
+class RiskEngineDenied(QIException):
+    code = "QIT009001"
+
+    def __init__(self, reason: str) -> None:
+        title = "Risk Engine Denied"
+        http_status = 403
+        description = f"Transaction denied by Anti-Fraud Risk Engine: {reason}"
+        translation = f"Transação negada pelo Motor de Risco Antifraude: {reason}"
+        super().__init__(title, self.code, http_status, description, translation)

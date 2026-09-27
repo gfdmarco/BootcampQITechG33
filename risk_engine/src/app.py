@@ -45,6 +45,9 @@ def create_app() -> FastAPI:
     application.add_api_route("/risk_profile/{customer_key}",     risk_resource.on_get_profile,    methods=["GET"])
     application.add_api_route("/risk_profile",                         risk_resource.on_get_profile_list, methods=["GET"])
 
+    from errors import register_error_handlers
+    register_error_handlers(application)
+
     return application
 
 

@@ -1,38 +1,21 @@
 import requests
 import os
 import logging
-from connectors.redis_connector import RedisCacheConnector
 from errors import RiskEngineDenied
-
-RISK_SCORE_TTL = 6 * 60 * 60  # 6 horas — ciclo do LLM Worker
 
 class RiskEngineConnector:
     def __init__(self):
         self.risk_url = os.getenv("RISK_ENGINE_URL", "http://risk_engine:3000")
         self.logger = logging.getLogger(__name__)
-        self.cache = RedisCacheConnector()
 
     def evaluate_transaction(self, customer_key: str, amount: int, transaction_type: str) -> None:
         """
         Consulta o score de risco do cliente.
 
-        Estratégia em duas camadas:
-          1. Lê o score pré-calculado do Redis (< 1ms). Se existir e for HIGH, bloqueia.
-          2. Se o Redis não tiver o score (cold start ou TTL expirado), cai no
-             HTTP ao Risk Engine como fallback síncrono.
-        Engole falhas de rede (Fail-Open) para não derrubar o Core.
+        Chama o Risk Engine sincronicamente para avaliar a transação contra
+        a política de limites do score do cliente (ex: MEDIUM = R$10k).
+        Se houver falha de rede (timeout/indisponibilidade), adota Fail-Open.
         """
-        cache_key = f"risk:{customer_key}"
-
-        # Camada 1: Redis (Read Model — path quente)
-        cached_score = self.cache.get(cache_key)
-        if cached_score is not None:
-            self.logger.debug(f"Risk score lido do cache para {customer_key}: {cached_score}")
-            if cached_score == "high":
-                raise RiskEngineDenied("HIGH_RISK_SCORE_CACHED")
-            return  # low ou medium — aprovado direto
-
-        # Camada 2: HTTP ao Risk Engine (fallback — cold start)
         try:
             payload = {
                 "customer_key": customer_key,
@@ -43,12 +26,8 @@ class RiskEngineConnector:
 
             if response.status_code == 200:
                 data = response.json()
-                # Persiste no Redis para as próximas chamadas
-                score = data.get("score", "unknown")
-                self.cache.set(cache_key, score, ttl_seconds=RISK_SCORE_TTL)
-
                 if data.get("action") == "DENY":
-                    raise RiskEngineDenied(data.get("reason", "Unknown Risk"))
+                    raise RiskEngineDenied(data.get("reason", "Denied by Risk Engine Policy"))
 
         except requests.exceptions.RequestException as e:
             self.logger.warning(

@@ -23,6 +23,14 @@ class RiskRepository:
             .first()
         )
 
+    def get_all_limit_policies(self, score_id: int) -> list[RiskLimitPolicy]:
+        """Retorna TODAS as políticas de limite de um score (transfer, deposit, etc.)."""
+        return (
+            self.session.query(RiskLimitPolicy)
+            .filter(RiskLimitPolicy.risk_score_id == score_id)
+            .all()
+        )
+
     def upsert_profile(self, customer_key: str, score_enumerator: str, reason: str) -> RiskProfile:
         """Cria ou atualiza o perfil de risco de um cliente."""
         score = (
@@ -39,8 +47,6 @@ class RiskRepository:
 
         profile.risk_score_id = score.id
         profile.reason = reason
-        self.session.commit()
-        self.session.refresh(profile)
         return profile
 
     def list_all_profiles(self) -> list:
