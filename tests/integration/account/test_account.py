@@ -141,7 +141,7 @@ class TestAccountEndpoints:
         status, list_response = RequestGenerator.GET_accounts(alice_token)
         assert status == 200
         
-        account_keys = [acc["account_key"] for acc in list_response["items"]]
+        account_keys = [acc["account_key"] for acc in list_response["data"]]
         assert alice_acc["account_key"] in account_keys
         assert bob_acc["account_key"] not in account_keys
 

@@ -22,7 +22,7 @@ class TestCustomerCreate:
         assert response["name"] == payload["name"]
         assert response["email"] == payload["email"]
         assert response["document_number"] == document_number
-        assert response["status"] == "created"
+        assert response["status"] == "success"
         
         # A senha não pode ser retornada!
         assert "password" not in response
@@ -35,7 +35,7 @@ class TestCustomerCreate:
         status, response = RequestGenerator.POST_customer(payload)
 
         assert status == 422
-        assert response["code"] == "QIT001008"
+        assert response["code"] == "QIT001007"
 
     def test_refuses_weak_password(self):
         payload = PayloadGenerator.create_customer_payload()

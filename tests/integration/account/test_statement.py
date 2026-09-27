@@ -53,7 +53,7 @@ class TestAccountStatement:
         # Alice gets statement
         status, response = RequestGenerator.GET_account_statement(alice_acc, None, alice_token)
         assert status == 200
-        assert "items" in response
+        assert "data" in response
         
         transaction_keys = [item["transaction_key"] for item in response["items"]]
         assert transaction_key in transaction_keys
@@ -72,10 +72,11 @@ class TestAccountStatement:
         # Test date inversion -> 400
         status, response = RequestGenerator.GET_account_statement(
             alice_acc, 
-            {"start_date": "2024-12-31", "end_date": "2024-01-01"}, 
+            {"date_from": "2024-12-31", "dateo_to": "2024-01-01"}, 
             alice_token
         )
         assert status == 400
+        assert response["code"] == "QIT000010"
 
         # Pagination validation
         # First, add a couple more transactions
