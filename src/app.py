@@ -10,7 +10,7 @@ from middlewares import (
     register_session_manager_middleware,
     register_jwt_middleware,
 )
-from resources import HealthCheckResource, SampleEntityResource, CustomerResource, AccountResource
+from resources import HealthCheckResource, SampleEntityResource, CustomerResource, AccountResource, TransactionResource
 from utils.logger import setup_logging
 
 
@@ -214,6 +214,29 @@ def create_app() -> FastAPI:
         methods=["GET"],
     )
 
+# ────────────────────────────────────────────────────────────────
+    # Rotas de Transações
+    # ────────────────────────────────────────────────────────────────
+    transaction_resource = TransactionResource()
+
+    application.add_api_route(
+        "/transactions",
+        transaction_resource.on_post,
+        methods=["POST"],
+    )
+
+
+    application.add_api_route(
+        "/transactions/{transaction_key}",
+        transaction_resource.on_get_by_key,
+        methods=["GET"],
+    )
+
+    application.add_api_route(
+        "/transactions",
+        transaction_resource.on_get_list,
+        methods=["GET"],
+    )
 
 
 
