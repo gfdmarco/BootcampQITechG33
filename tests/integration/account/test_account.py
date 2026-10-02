@@ -106,23 +106,10 @@ class TestAccountEndpoints:
         assert status == 200
         assert response["status"] == "active"
         
-        # Give alice some money to test close with balance (deposit bypass)
-        deposit_payload = {
-            "account_key": alice_acc_key,
-            "type": "deposit",
-            "amount": 100
-        }
-        RequestGenerator.POST_transaction(deposit_payload, alice_token)
-
-        # Alice tries to close with balance
-        status, response = RequestGenerator.PUT_account(
-            alice_acc_key,
-            {"status": "closed"},
-            alice_token
-        )
-        # We might not have money if deposit fails, but if it works it should be 409
-        if status == 409:
-            assert True
+        status, _ = RequestGenerator.POST_transaction(PayloadGenerator.deposit(alice_acc_key, 100), alice_token)
+        assert status == 201
+        status, response = RequestGenerator.PUT_account(alice_acc_key, {"status": "closed"}, alice_token)
+        assert status == 409
 
     def test_get_accounts_list(self):
         """GET /accounts: Lista só as contas do chamador. Nunca contém conta de outro cliente"""
@@ -141,6 +128,54 @@ class TestAccountEndpoints:
         status, list_response = RequestGenerator.GET_accounts(alice_token)
         assert status == 200
         
-        account_keys = [acc["account_key"] for acc in list_response["items"]]
+        account_keys = [acc["account_key"] for acc in list_response["data"]]
         assert alice_acc["account_key"] in account_keys
         assert bob_acc["account_key"] not in account_keys
+
+    def test_account_creation_success_and_failure_codes(self):
+        """
+        Garante que a criação com dados válidos retorna 201 e 
+        a criação com dados inválidos/incompletos retorna erros da família 4xx.
+        """
+        customer_key, access_token = self._create_and_login_customer()
+
+        # ---------------------------------------------------------
+        # TESTE 1: SUCESSO (Caminho Feliz)
+        # ---------------------------------------------------------
+        valid_payload = {"type": "checking"}
+        
+        # Executa o pedido POST para criar a conta
+        status_success, response_success = RequestGenerator.POST_customer_account(
+            customer_key,
+            valid_payload,
+            access_token
+        )
+        
+        # Valida que o código HTTP é 201 (Created) e que a resposta contém a account_key[cite: 12]
+        assert status_success == 201
+        assert "account_key" in response_success
+
+        # ---------------------------------------------------------
+        # TESTE 2: FALHA (Falta do campo obrigatório 'type')
+        # ---------------------------------------------------------
+        invalid_payload_empty = {}
+        
+        status_empty, _ = RequestGenerator.POST_customer_account(
+            customer_key,
+            invalid_payload_empty,
+            access_token
+        )
+        
+        assert status_empty  == 400
+
+        # ---------------------------------------------------------
+        # TESTE 3: FALHA (Tipo de conta não suportado)
+        # ---------------------------------------------------------
+        invalid_payload_wrong_type = {"type": "crypto_wallet"}
+        
+        status_wrong_type, _ = RequestGenerator.POST_customer_account(
+            customer_key,
+            invalid_payload_wrong_type,
+            access_token
+        )
+        assert status_wrong_type == 400

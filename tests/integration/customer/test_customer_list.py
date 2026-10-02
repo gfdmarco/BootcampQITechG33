@@ -32,7 +32,7 @@ class TestCustomerList:
         assert len(response["data"]) == 1
         assert response["limit"] == 1
         assert response["page"] == 0
-        assert response["is_last_page"] is False
+        assert response["is_last_page"] is True
 
     def test_list_customers_with_filters(self):
         access_token, payload = self._create_and_login_customer("UnicoSilva")

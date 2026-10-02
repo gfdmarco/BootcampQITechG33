@@ -29,7 +29,7 @@ class TestCustomerDelete:
         status_get, response_get = RequestGenerator.GET_customer(customer_key, access_token)
         assert status_get == 200
         
-        assert response_get["status"]["enumerator"] == "failed"
+        assert response_get["status"] == "failed"
         assert response_get["name"] == "DELETED_USER"
         assert "deleted_" in response_get["email"]
 

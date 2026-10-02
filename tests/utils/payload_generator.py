@@ -79,3 +79,13 @@ class PayloadGenerator:
             "password": password,
         }
         return payload
+
+    @staticmethod
+    def deposit(account_key: str, amount: int, channel: str = "pix") -> dict:
+        return {"type": "deposit", "destination_account_key": account_key,
+                "amount": amount, "channel": channel}
+
+    @staticmethod
+    def transfer(origin: str, destination: str, amount: int, channel: str = "pix") -> dict:
+        return {"type": "transfer", "origin_account_key": origin,
+                "destination_account_key": destination, "amount": amount, "channel": channel}
