@@ -10,7 +10,7 @@ from middlewares import (
     register_session_manager_middleware,
     register_jwt_middleware,
 )
-from resources import HealthCheckResource, SampleEntityResource, CustomerResource, AccountResource, TransactionResource
+from resources import HealthCheckResource, SampleEntityResource, CustomerResource, AccountResource, TransactionResource, CorporateResource
 from utils.logger import setup_logging
 
 
@@ -264,6 +264,48 @@ def create_app() -> FastAPI:
         "/sample_entities",
         sample_entity_resource.on_get_list,
         methods=["GET"],
+    )
+
+    # ────────────────────────────────────────────────────────────────
+    # Rotas de Pessoa Jurídica (Corporate)
+    # ────────────────────────────────────────────────────────────────
+    corporate_resource = CorporateResource()
+    
+    application.add_api_route(
+        "/corporates",
+        corporate_resource.on_post,
+        methods=["POST"],
+    )
+    application.add_api_route(
+        "/corporates/{corporate_key}",
+        corporate_resource.on_get_by_key,
+        methods=["GET"],
+    )
+    application.add_api_route(
+        "/corporates/{corporate_key}/members",
+        corporate_resource.on_post_member,
+        methods=["POST"],
+    )
+    application.add_api_route(
+        "/corporates/{corporate_key}/members/{target_customer_key}",
+        corporate_resource.on_delete_member,
+        methods=["DELETE"],
+    )
+    application.add_api_route(
+        "/corporates/{corporate_key}/accounts",
+        corporate_resource.on_post_account,
+        methods=["POST"],
+    )
+
+    application.add_api_route(
+        "/corporates/{corporate_key}/transfers",
+        corporate_resource.on_post_transfer,
+        methods=["POST"],
+    )
+    application.add_api_route(
+        "/corporates/{corporate_key}/transfers/{request_id}/approve",
+        corporate_resource.on_post_approve_transfer,
+        methods=["POST"],
     )
 
     register_error_handlers(application)

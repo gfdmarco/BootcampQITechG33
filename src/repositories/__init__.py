@@ -4,3 +4,4 @@ from repositories.customer_repository import CustomerRepository
 from repositories.account_repository import AccountRepository
 from repositories.transaction_repository import TransactionRepository
 from repositories.fee_repository import FeeRepository
+from repositories.corporate_repository import CorporateRepository
