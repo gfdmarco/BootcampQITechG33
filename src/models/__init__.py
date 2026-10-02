@@ -19,3 +19,10 @@ from models.transaction_status_event import TransactionStatusEvent
 from models.bank_slip_status import BankSlipStatus
 from models.bank_slip import BankSlip
 from models.bank_slip_status_event import BankSlipStatusEvent
+
+from models.corporate_status import CorporateStatus
+from models.corporate_customer import CorporateCustomer
+from models.corporate_member import CorporateMember
+from models.corporate_account import CorporateAccount
+from models.corporate_transfer_request import CorporateTransferRequest
+from models.corporate_audit import CorporateAudit

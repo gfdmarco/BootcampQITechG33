@@ -6,3 +6,4 @@ from resources.sample_entity import SampleEntityResource
 from resources.account import AccountResource
 from resources.transaction import TransactionResource
 from resources.bank_slip import BankSlipResource
+from resources.corporate import CorporateResource

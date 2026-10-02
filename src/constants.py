@@ -27,6 +27,10 @@ BANKSLIP_API_INTERNAL_TOKEN = os.environ.get("BANKSLIP_API_INTERNAL_TOKEN", "def
 # src/connectors/rest_connector.py.
 BANKSLIP_API_TIMEOUT = int(os.environ.get("BANKSLIP_API_TIMEOUT", "5"))
 
+RISK_ENGINE_URL = os.environ.get("RISK_ENGINE_URL", "http://risk_engine:3000")
+RISK_INTERNAL_TOKEN = os.environ.get("RISK_INTERNAL_TOKEN", "risk_default_token")
+RISK_ENGINE_TIMEOUT = int(os.environ.get("RISK_ENGINE_TIMEOUT", "3"))
+
 # Rotas públicas: não exigem o header INTERNAL-TOKEN. São as duas que
 # precisam responder pra quem ainda não tem token nenhum: a raiz, que
 # diz quem é este serviço, e o health check, que o Docker consulta pra

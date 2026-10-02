@@ -96,7 +96,26 @@ class AccountController(BaseController):
 
         self.session.flush()
         account_dto = AccountDTO.obj_to_dict(account)
+
+        _owner_key = account.customer.customer_key.strip()
+        _new_status = new_status.value if hasattr(new_status, "value") else new_status
+
         self.session.commit()
+
+        # Notificacao fire-and-forget: nunca quebra a mudanca de status.
+        if _new_status in ("blocked", "active"):
+            try:
+                from controllers.notification_controller import NotificationController
+
+                notifier = NotificationController()
+                notifier.notify_account_status(_owner_key, _new_status)
+                notifier.session.commit()
+            except Exception:
+                self.logger.exception("Falha ao criar notificacao de conta")
+                try:
+                    self.session.rollback()
+                except Exception:
+                    pass
 
         return account_dto
 

@@ -137,4 +137,58 @@ CREATE TABLE bank_slip_status_event (
     to_status_id    INTEGER NOT NULL REFERENCES bank_slip_status(id),
     reason          VARCHAR(255),
     created_at      TIMESTAMP NOT NULL DEFAULT NOW()
+CREATE TABLE corporate_status (
+    id          SERIAL PRIMARY KEY,
+    enumerator  VARCHAR(20) NOT NULL,
+    created_at  TIMESTAMP NOT NULL DEFAULT NOW(),
+    UNIQUE(enumerator)
+);
+INSERT INTO corporate_status (enumerator) VALUES ('created'), ('pending'), ('active'), ('blocked');
+
+CREATE TABLE corporate_customer (
+    id            SERIAL PRIMARY KEY,
+    corporate_key CHAR(36) NOT NULL,
+    cnpj          CHAR(14) NOT NULL,
+    company_name  VARCHAR(255) NOT NULL,
+    trade_name    VARCHAR(255),
+    status_id     INTEGER NOT NULL REFERENCES corporate_status(id),
+    created_at    TIMESTAMP NOT NULL DEFAULT NOW(),
+    updated_at    TIMESTAMP NOT NULL DEFAULT NOW(),
+    UNIQUE(corporate_key), UNIQUE(cnpj)
+);
+
+CREATE TABLE corporate_member (
+    id            SERIAL PRIMARY KEY,
+    corporate_id  INTEGER NOT NULL REFERENCES corporate_customer(id),
+    customer_id   INTEGER NOT NULL REFERENCES customer(id),
+    role          VARCHAR(20) NOT NULL,
+    created_at    TIMESTAMP NOT NULL DEFAULT NOW(),
+    UNIQUE(corporate_id, customer_id)
+);
+
+CREATE TABLE corporate_account (
+    id            SERIAL PRIMARY KEY,
+    corporate_id  INTEGER NOT NULL REFERENCES corporate_customer(id),
+    account_id    INTEGER NOT NULL REFERENCES account(id),
+    created_at    TIMESTAMP NOT NULL DEFAULT NOW(),
+    UNIQUE(corporate_id, account_id)
+);
+
+CREATE TABLE corporate_transfer_request (
+    id                      SERIAL PRIMARY KEY,
+    corporate_id            INTEGER NOT NULL REFERENCES corporate_customer(id),
+    requester_customer_id   INTEGER NOT NULL REFERENCES customer(id),
+    origin_account_id       INTEGER NOT NULL REFERENCES account(id),
+    destination_account_key CHAR(36) NOT NULL,
+    amount                  BIGINT NOT NULL,
+    status                  VARCHAR(20) NOT NULL DEFAULT 'pending',
+    created_at              TIMESTAMP NOT NULL DEFAULT NOW()
+);
+
+CREATE TABLE corporate_audit (
+    id                  SERIAL PRIMARY KEY,
+    corporate_id        INTEGER NOT NULL REFERENCES corporate_customer(id),
+    actor_customer_id   INTEGER REFERENCES customer(id),
+    action              VARCHAR(100) NOT NULL,
+    created_at          TIMESTAMP NOT NULL DEFAULT NOW()
 );
