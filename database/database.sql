@@ -104,3 +104,14 @@ CREATE TABLE transaction_status_event (
     reason          VARCHAR(255),
     created_at      TIMESTAMP NOT NULL DEFAULT NOW()
 );
+
+CREATE TABLE notification (
+    id           SERIAL PRIMARY KEY,
+    key          CHAR(36)      NOT NULL,
+    customer_key CHAR(36)      NOT NULL,
+    title        VARCHAR(100)  NOT NULL,
+    body         TEXT          NOT NULL,
+    is_read      BOOLEAN       NOT NULL DEFAULT FALSE,
+    created_at   TIMESTAMP     NOT NULL DEFAULT NOW(),
+    UNIQUE(key)
+);

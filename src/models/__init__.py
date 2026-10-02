@@ -15,3 +15,5 @@ from models.fee import Fee
 from models.transaction_status import TransactionStatus
 from models.transaction import Transaction
 from models.transaction_status_event import TransactionStatusEvent
+
+from models.notification import Notification
