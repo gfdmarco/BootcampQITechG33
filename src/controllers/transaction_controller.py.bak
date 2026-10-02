@@ -128,17 +128,14 @@ class TransactionController(BaseController):
                     raise InsufficientBalance()
 
         # Validação via Connector Externo (Anti-Fraud Sidecar)
-        # Só para transferências (débitos): depósitos são créditos, não
-        # consomem limite diário e não precisam de avaliação de risco.
-        # É chamado após todas as validações de saldo/conta passarem para
-        # evitar "Ghost Spend" (limite consumido por transação que falhou).
-        # Se negar, levanta RiskEngineDenied (403) e o SQLAlchemy faz rollback.
-        if payload.get("type") == "transfer":
-            self.risk_connector.evaluate_transaction(
-                customer_key=authenticated_customer_key,
-                amount=payload.get("amount", 0),
-                transaction_type=payload.get("channel")
-            )
+        # É chamado apenas após todas as validações de saldo e conta passarem
+        # para evitar "Ghost Spend" (limite consumido por transação que falhou).
+        # Se negar, levanta RiskEngineDenied (403) e o SQLAlchemy faz rollback do débito acima.
+        self.risk_connector.evaluate_transaction(
+            customer_key=authenticated_customer_key,
+            amount=payload.get("amount", 0),
+            transaction_type=payload.get("channel")
+        )
 
         transaction_data = {
             "origin_account": origin_account,

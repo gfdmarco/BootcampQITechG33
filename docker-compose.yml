@@ -43,6 +43,7 @@ services:
       BANKSLIP_API_INTERNAL_TOKEN: ${BANKSLIP_API_INTERNAL_TOKEN:-default_token}
       BANKSLIP_API_TIMEOUT: ${BANKSLIP_API_TIMEOUT:-5}
       RISK_ENGINE_URL: ${RISK_ENGINE_URL:-http://risk_engine:3000}
+      RISK_INTERNAL_TOKEN: ${RISK_INTERNAL_TOKEN:-risk_default_token}
       REDIS_URL: ${REDIS_URL:-redis://redis:6379/0}
 
     volumes:

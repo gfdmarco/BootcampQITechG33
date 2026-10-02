@@ -23,12 +23,20 @@ class RiskEngineConnector:
                 "amount": amount,
                 "transaction_type": transaction_type
             }
-            response = requests.post(f"{self.risk_url}/evaluate", json=payload, timeout=2)
+            headers = {
+                "INTERNAL-TOKEN": os.getenv("RISK_INTERNAL_TOKEN", "risk_default_token")
+            }
+            response = requests.post(f"{self.risk_url}/evaluate", json=payload, headers=headers, timeout=2)
 
             if response.status_code == 200:
                 data = response.json()
                 if data.get("action") == "DENY":
                     raise RiskEngineDenied(data.get("reason", "Denied by Risk Engine Policy"))
+            elif response.status_code == 403:
+                self.logger.error("Risk Engine retornou 403 Forbidden. Verifique o RISK_INTERNAL_TOKEN.")
+                # Se for 403, falhou autenticação com o Sidecar, trata como indisponibilidade (Degraded Mode)
+                raise requests.exceptions.RequestException("Risk Engine Authentication Failed")
+
 
         except requests.exceptions.RequestException as e:
             self.logger.warning(
