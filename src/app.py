@@ -10,7 +10,7 @@ from middlewares import (
     register_session_manager_middleware,
     register_jwt_middleware,
 )
-from resources import HealthCheckResource, SampleEntityResource, CustomerResource, AccountResource, TransactionResource
+from resources import HealthCheckResource, SampleEntityResource, CustomerResource, AccountResource, TransactionResource, NotificationResource
 from utils.logger import setup_logging
 
 
@@ -236,6 +236,23 @@ def create_app() -> FastAPI:
         "/transactions",
         transaction_resource.on_get_list,
         methods=["GET"],
+    )
+
+    # ────────────────────────────────────────────────────────────────
+    # Rotas de Notificações
+    # ────────────────────────────────────────────────────────────────
+    notification_resource = NotificationResource()
+
+    application.add_api_route(
+        "/notifications",
+        notification_resource.on_get_list,
+        methods=["GET"],
+    )
+
+    application.add_api_route(
+        "/notifications/{key}/read",
+        notification_resource.on_patch_read,
+        methods=["PATCH"],
     )
 
 

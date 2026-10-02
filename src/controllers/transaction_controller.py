@@ -164,7 +164,31 @@ class TransactionController(BaseController):
         # Passa pelo DTO antes do commit final.
         transaction_dto = TransactionDTO.only_obj_key(transaction)
 
+        # Captura valores simples ANTES do commit (objetos expiram depois).
+        _sender_key = authenticated_customer_key
+        _receiver_key = destination_account.customer.customer_key.strip()
+        _amount = payload["amount"]
+        _channel = payload["channel"]
+
         self.session.commit()
+
+        # Notificacao fire-and-forget: nunca quebra a transferencia.
+        try:
+            from controllers.notification_controller import NotificationController
+
+            notifier = NotificationController()
+            if transaction_type == "transfer":
+                notifier.notify_transfer(_sender_key, _receiver_key, _amount, _channel)
+            else:
+                notifier.notify_deposit(_receiver_key, _amount, _channel)
+            notifier.session.commit()
+        except Exception:
+            self.logger.exception("Falha ao criar notificacao de transacao")
+            try:
+                self.session.rollback()
+            except Exception:
+                pass
+
         return transaction_dto
 
     def get_by_key(self, transaction_key: str, authenticated_customer_key: str) -> dict:

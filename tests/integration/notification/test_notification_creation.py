@@ -19,8 +19,9 @@ class TestNotificationOnTransfer:
 
         status, body = _notifications(alice_token)
         assert status == 200, body
-        assert body["total"] == 1
-        assert body["unread_count"] == 1
+        # Alice recebe 1 pelo proprio deposito + 1 pelo envio da transferencia
+        assert body["total"] == 2
+        assert body["unread_count"] == 2
 
     def test_transfer_creates_notification_for_receiver(self):
         """Apos transferencia, destinatario tem 1 notificacao."""
