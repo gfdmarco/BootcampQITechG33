@@ -1,0 +1,18 @@
+{
+    "type": "object",
+    "properties": {
+        "customer_key": {
+            "type": "string",
+            "format": "uuid"
+        },
+        "role": {
+            "type": "string",
+            "enum": ["finance", "operator", "viewer"]
+        }
+    },
+    "required": [
+        "customer_key",
+        "role"
+    ],
+    "additionalProperties": false
+}

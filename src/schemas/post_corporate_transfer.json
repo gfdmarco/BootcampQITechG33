@@ -1,0 +1,23 @@
+{
+    "type": "object",
+    "properties": {
+        "origin_account_key": {
+            "type": "string",
+            "format": "uuid"
+        },
+        "destination_account_key": {
+            "type": "string",
+            "format": "uuid"
+        },
+        "amount": {
+            "type": "integer",
+            "minimum": 1
+        }
+    },
+    "required": [
+        "origin_account_key",
+        "destination_account_key",
+        "amount"
+    ],
+    "additionalProperties": false
+}

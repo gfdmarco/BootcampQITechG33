@@ -334,50 +334,63 @@ class ForbiddenAction(QIException):
         translation = "Você não tem permissão para acessar ou modificar este recurso."
         super().__init__(title, self.code, http_status, description, translation)
 
-# ──────────────────────────────────────────────────────────────────────────────
-# QIT003xxx — Loans Domain
-# ──────────────────────────────────────────────────────────────────────────────
+class InvalidCNPJ(QIException):
+    code = "QIT004001"
 
-class HighRiskProfile(QIException):
-    code = "QIT003001"
     def __init__(self) -> None:
-        super().__init__(
-            title="Loan Denied",
-            code=self.code,
-            http_status=422,
-            description="The customer's risk profile is too high to be granted a loan.",
-            translation="O perfil de risco é muito alto."
-        )
+        title = "Invalid CNPJ"
+        http_status = 422
+        description = "The provided CNPJ is invalid."
+        translation = "O CNPJ fornecido é inválido."
+        super().__init__(title, self.code, http_status, description, translation)
 
-class InsufficientBalanceForInstallment(QIException):
-    code = "QIT003002"
-    def __init__(self) -> None:
-        super().__init__(
-            title="Insufficient Balance",
-            code=self.code,
-            http_status=422,
-            description="Account does not have enough balance to pay the installment.",
-            translation="Saldo insuficiente para pagar a parcela."
-        )
 
-class InstallmentNotFound(QIException):
-    code = "QIT003003"
-    def __init__(self) -> None:
-        super().__init__(
-            title="Installment Not Found",
-            code=self.code,
-            http_status=404,
-            description="The requested installment was not found for this account.",
-            translation="Parcela não encontrada."
-        )
+class DuplicatedCNPJ(QIException):
+    code = "QIT004002"
 
-class InvalidLoanAmount(QIException):
-    code = "QIT003004"
     def __init__(self) -> None:
-        super().__init__(
-            title="Invalid Loan Amount",
-            code=self.code,
-            http_status=422,
-            description="The requested loan amount must be greater than zero.",
-            translation="O valor do empréstimo deve ser maior que zero."
-        )
+        title = "Duplicated CNPJ"
+        http_status = 409
+        description = "This CNPJ is already registered."
+        translation = "Este CNPJ já está cadastrado."
+        super().__init__(title, self.code, http_status, description, translation)
+
+class NotFoundCorporate(QIException):
+    code = "QIT004003"
+
+    def __init__(self, corporate_key) -> None:
+        title = "Corporate not Found"
+        http_status = 404
+        description = f"Corporate with key {corporate_key} was not found."
+        translation = f"A empresa com chave {corporate_key} não foi encontrada."
+        super().__init__(title, self.code, http_status, description, translation)
+
+class AlreadyCorporateMember(QIException):
+    code = "QIT004004"
+
+    def __init__(self) -> None:
+        title = "Already Corporate Member"
+        http_status = 409
+        description = "This customer is already a member of this corporate."
+        translation = "Este cliente já é membro desta empresa."
+        super().__init__(title, self.code, http_status, description, translation)
+
+class NotFoundTransferRequest(QIException):
+    code = "QIT004005"
+
+    def __init__(self) -> None:
+        title = "Transfer Request not Found"
+        http_status = 404
+        description = "The corporate transfer request was not found."
+        translation = "A solicitação de transferência corporativa não foi encontrada."
+        super().__init__(title, self.code, http_status, description, translation)
+
+class NotACorporateAccount(QIException):
+    code = "QIT004006"
+
+    def __init__(self) -> None:
+        title = "Not a Corporate Account"
+        http_status = 403
+        description = "The provided account is not linked to this corporate entity."
+        translation = "A conta fornecida não está vinculada a esta empresa."
+        super().__init__(title, self.code, http_status, description, translation)

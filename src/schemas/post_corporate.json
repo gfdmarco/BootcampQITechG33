@@ -1,0 +1,23 @@
+{
+    "type": "object",
+    "properties": {
+        "cnpj": {
+            "type": "string",
+            "pattern": "^\\d{14}$"
+        },
+        "company_name": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 255
+        },
+        "trade_name": {
+            "type": "string",
+            "maxLength": 255
+        }
+    },
+    "required": [
+        "cnpj",
+        "company_name"
+    ],
+    "additionalProperties": false
+}
