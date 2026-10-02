@@ -15,3 +15,7 @@ from models.fee import Fee
 from models.transaction_status import TransactionStatus
 from models.transaction import Transaction
 from models.transaction_status_event import TransactionStatusEvent
+
+from models.bank_slip_status import BankSlipStatus
+from models.bank_slip import BankSlip
+from models.bank_slip_status_event import BankSlipStatusEvent

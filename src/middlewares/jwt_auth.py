@@ -1,7 +1,7 @@
 import jwt
 from fastapi import FastAPI, Request
 
-from constants import JWT_PUBLIC_ENDPOINTS
+from constants import JWT_PUBLIC_ENDPOINTS, WEBHOOK_PREFIX
 from errors.custom_errors import UnauthorizedToken
 from errors.handlers import qi_exception_to_response
 from utils.jwt_handler import decode_token
@@ -29,6 +29,9 @@ def register_jwt_middleware(application: FastAPI) -> None:
         # Checa se é uma rota pública do negócio (ex: /customers, /auth/login)
         # mudança: antes tava liberando rotas publicas de post em customers, comprometendo segurança
         if (request.url.path.rstrip("/"), request.method) in JWT_PUBLIC_ENDPOINTS:
+            return await call_next(request)
+
+        if request.url.path.startswith(WEBHOOK_PREFIX):
             return await call_next(request)
 
         # A partir daqui, o token é obrigatório

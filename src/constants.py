@@ -36,6 +36,8 @@ BYPASS_ENDPOINTS = [
     "/health_check",
 ]
 
+WEBHOOK_PREFIX = "/webhook/"
+
 REQUIRED_VARIABLES = ["DATABASE_URL", "INTERNAL_TOKEN", "JWT_SECRET"]
 
 JWT_SECRET = os.environ.get("JWT_SECRET")

@@ -88,7 +88,7 @@ CREATE TABLE transaction (
     fee_amount              BIGINT NOT NULL DEFAULT 0,              -- money charged (cents), not the percentage
     fee_id                  INTEGER REFERENCES fee(id),
     type                    VARCHAR(20) NOT NULL,   -- deposit / transfer
-    channel                 VARCHAR(50) NOT NULL,   -- pix / ted / card / international
+    channel                 VARCHAR(50) NOT NULL,   -- pix / ted / card / international / bank_slip
     status_id               INTEGER NOT NULL REFERENCES transaction_status(id),
     created_at              TIMESTAMP NOT NULL DEFAULT NOW(),
     updated_at              TIMESTAMP NOT NULL DEFAULT NOW(),
@@ -101,6 +101,40 @@ CREATE TABLE transaction_status_event (
     transaction_id  INTEGER NOT NULL REFERENCES transaction(id),
     from_status_id  INTEGER REFERENCES transaction_status(id),
     to_status_id    INTEGER NOT NULL REFERENCES transaction_status(id),
+    reason          VARCHAR(255),
+    created_at      TIMESTAMP NOT NULL DEFAULT NOW()
+);
+
+CREATE TABLE bank_slip_status (
+    id          SERIAL PRIMARY KEY,
+    enumerator  VARCHAR(50) NOT NULL,
+    created_at  TIMESTAMP NOT NULL DEFAULT NOW(),
+    UNIQUE(enumerator)
+);
+
+CREATE TABLE bank_slip (
+    id              SERIAL PRIMARY KEY,
+    bank_slip_key   CHAR(36) NOT NULL, 
+    amount          BIGINT NOT NULL, 
+    expiration_date DATE NOT NULL,
+    external_key    CHAR(36),
+    barcode         CHAR(47),
+    account_id      INTEGER NOT NULL REFERENCES account(id),
+    transaction_id  INTEGER REFERENCES transaction(id),
+    status_id       INTEGER NOT NULL REFERENCES bank_slip_status(id),
+    created_at  TIMESTAMP NOT NULL DEFAULT NOW(),
+    updated_at  TIMESTAMP NOT NULL DEFAULT NOW(),
+    UNIQUE(bank_slip_key), UNIQUE (external_key), UNIQUE (transaction_id),
+    check (amount > 0)
+);
+
+INSERT INTO bank_slip_status (enumerator) VALUES ('pending'), ('issued'), ('paid'), ('failed'), ('expired');
+
+CREATE TABLE bank_slip_status_event (
+    id              SERIAL PRIMARY KEY,
+    bank_slip_id  INTEGER NOT NULL REFERENCES bank_slip(id),
+    from_status_id  INTEGER REFERENCES bank_slip_status(id),
+    to_status_id    INTEGER NOT NULL REFERENCES bank_slip_status(id),
     reason          VARCHAR(255),
     created_at      TIMESTAMP NOT NULL DEFAULT NOW()
 );

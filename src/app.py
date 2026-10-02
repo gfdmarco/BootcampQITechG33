@@ -10,7 +10,7 @@ from middlewares import (
     register_session_manager_middleware,
     register_jwt_middleware,
 )
-from resources import HealthCheckResource, SampleEntityResource, CustomerResource, AccountResource, TransactionResource
+from resources import HealthCheckResource, SampleEntityResource, CustomerResource, AccountResource, TransactionResource, BankSlipResource
 from utils.logger import setup_logging
 
 
@@ -238,7 +238,31 @@ def create_app() -> FastAPI:
         methods=["GET"],
     )
 
+    #rotas de emissao de boletos de deposito
+    bank_slip_resource = BankSlipResource()
+    application.add_api_route(
+        "/accounts/{account_key}/bank_slips",
+        bank_slip_resource.on_post,
+        methods=["POST"],
+    )
 
+    application.add_api_route(
+        "/bank_slips/{bank_slip_key}",
+        bank_slip_resource.on_get_by_key,
+        methods=["GET"]
+    )
+
+    application.add_api_route(
+        "/webhook/bank_slips/{bank_slip_key}/paid",
+        bank_slip_resource.on_post_webhook_paid,
+        methods=["POST"],
+    )
+
+    application.add_api_route(
+        "/accounts/{account_key}/bank_slips",
+        bank_slip_resource.on_get_list,
+        methods=["GET"],
+    )
 
     application.add_api_route(
         "/sample_entity",

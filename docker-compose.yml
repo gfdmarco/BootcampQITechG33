@@ -39,7 +39,7 @@ services:
       # nesta lista NAO CHEGA no container: o compose repassa o que
       # esta escrito aqui, e mais nada. Sem estas tres linhas, mexer
       # nos BANKSLIP_* do .env nao teria efeito nenhum aqui dentro.
-      BANKSLIP_API_URL: ${BANKSLIP_API_URL:-http://localhost:8080}
+      BANKSLIP_API_URL: ${BANKSLIP_API_URL:-http://bankslip-mock:8080}
       BANKSLIP_API_INTERNAL_TOKEN: ${BANKSLIP_API_INTERNAL_TOKEN:-default_token}
       BANKSLIP_API_TIMEOUT: ${BANKSLIP_API_TIMEOUT:-5}
     volumes:
@@ -61,6 +61,8 @@ services:
     depends_on:
       db:
         condition: service_healthy
+      bankslip-mock:
+        condition: service_healthy
 
   db:
     build: ./database/.
@@ -76,5 +78,19 @@ services:
       test: ["CMD-SHELL", "pg_isready -U bootcamp -d bootcamp"]
       interval: 3s
       timeout: 3s
+      retries: 20
+  
+  bankslip-mock:
+    build: ./mock
+    environment:
+      # A senha que o mock exige. Mesma variável que a API usa para enviar,
+      # então os dois lados sempre batem.
+      MOCK_INTERNAL_TOKEN: ${BANKSLIP_API_INTERNAL_TOKEN:-default_token}
+    ports:
+      - "${MOCK_PORT:-8080}:8080"
+    healthcheck:
+      test: ["CMD-SHELL", "python -c 'import urllib.request; urllib.request.urlopen(\"http://localhost:8080/health_check\")'"]
+      interval: 3s
+      timeout: 5s
       retries: 20
 
