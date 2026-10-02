@@ -333,3 +333,51 @@ class ForbiddenAction(QIException):
         description = "You do not have permission to access or modify this resource."
         translation = "Você não tem permissão para acessar ou modificar este recurso."
         super().__init__(title, self.code, http_status, description, translation)
+
+# ──────────────────────────────────────────────────────────────────────────────
+# QIT003xxx — Loans Domain
+# ──────────────────────────────────────────────────────────────────────────────
+
+class HighRiskProfile(QIException):
+    code = "QIT003001"
+    def __init__(self) -> None:
+        super().__init__(
+            title="Loan Denied",
+            code=self.code,
+            http_status=422,
+            description="The customer's risk profile is too high to be granted a loan.",
+            translation="O perfil de risco é muito alto."
+        )
+
+class InsufficientBalanceForInstallment(QIException):
+    code = "QIT003002"
+    def __init__(self) -> None:
+        super().__init__(
+            title="Insufficient Balance",
+            code=self.code,
+            http_status=422,
+            description="Account does not have enough balance to pay the installment.",
+            translation="Saldo insuficiente para pagar a parcela."
+        )
+
+class InstallmentNotFound(QIException):
+    code = "QIT003003"
+    def __init__(self) -> None:
+        super().__init__(
+            title="Installment Not Found",
+            code=self.code,
+            http_status=404,
+            description="The requested installment was not found for this account.",
+            translation="Parcela não encontrada."
+        )
+
+class InvalidLoanAmount(QIException):
+    code = "QIT003004"
+    def __init__(self) -> None:
+        super().__init__(
+            title="Invalid Loan Amount",
+            code=self.code,
+            http_status=422,
+            description="The requested loan amount must be greater than zero.",
+            translation="O valor do empréstimo deve ser maior que zero."
+        )

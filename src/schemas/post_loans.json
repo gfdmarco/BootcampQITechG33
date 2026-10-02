@@ -1,0 +1,23 @@
+{
+    "type": "object",
+    "properties": {
+        "account_key": {
+            "type": "string",
+            "format": "uuid"
+        },
+        "requested_amount": {
+            "type": "integer",
+            "minimum": 1
+        },
+        "installments_count": {
+            "type": "integer",
+            "minimum": 1
+        }
+    },
+    "required": [
+        "account_key",
+        "requested_amount",
+        "installments_count"
+    ],
+    "additionalProperties": false
+}

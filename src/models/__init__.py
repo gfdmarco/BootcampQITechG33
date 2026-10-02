@@ -15,3 +15,6 @@ from models.fee import Fee
 from models.transaction_status import TransactionStatus
 from models.transaction import Transaction
 from models.transaction_status_event import TransactionStatusEvent
+
+from models.loan import Loan
+from models.loan_installment import LoanInstallment

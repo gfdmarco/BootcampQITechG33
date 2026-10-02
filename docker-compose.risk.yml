@@ -1,0 +1,16 @@
+services:
+  risk_engine:
+    image: python:3.11-slim
+    command: sh -c "pip install fastapi uvicorn && uvicorn risk_engine:app --host 0.0.0.0 --port 3000"
+    working_dir: /app
+    volumes:
+      - ./mock_server:/app
+    ports:
+      - "8001:3000"
+    networks:
+      - default
+
+networks:
+  default:
+    name: bootcampqitechg33_default
+    external: true
