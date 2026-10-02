@@ -26,6 +26,12 @@ def register_jwt_middleware(application: FastAPI) -> None:
         if request.url.path in BYPASS_ENDPOINTS:
             return await call_next(request)
 
+        # sample_entity não usa JWT por ser apenas um exemplo isolado do banco
+        if (request.url.path.startswith("/sample_entity")
+                or request.url.path.startswith("/sample_entities")
+                or request.url.path.startswith("/webhook/sample_entity")):
+            return await call_next(request)
+
         # Checa se é uma rota pública do negócio (ex: /customers, /auth/login)
         # mudança: antes tava liberando rotas publicas de post em customers, comprometendo segurança
         if (request.url.path.rstrip("/"), request.method) in JWT_PUBLIC_ENDPOINTS:
