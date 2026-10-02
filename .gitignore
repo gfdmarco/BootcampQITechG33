@@ -76,3 +76,5 @@ coverage.xml
 # --- Tipagem estática --------------------------------------
 .mypy_cache/
 .ruff_cache/
+risk_patch.py
+risk_refactor.py
