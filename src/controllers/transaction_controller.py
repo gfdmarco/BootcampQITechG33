@@ -57,13 +57,6 @@ class TransactionController(BaseController):
         """
         self.logger.debug("Processando uma nova transação")
 
-        # Validação via Connector Externo (Anti-Fraud Sidecar)
-        self.risk_connector.evaluate_transaction(
-            customer_key=authenticated_customer_key,
-            amount=payload.get("amount", 0),
-            transaction_type=payload.get("channel")
-        )
-
         transaction_type = payload.get("type")
         destination_account_key = payload.get("destination_account_key")
 
@@ -133,6 +126,16 @@ class TransactionController(BaseController):
                 self.account_repository.credit(destination_account.id, amount)
                 if not self.account_repository.debit(origin_account.id, total_debit):
                     raise InsufficientBalance()
+
+        # Validação via Connector Externo (Anti-Fraud Sidecar)
+        # É chamado apenas após todas as validações de saldo e conta passarem
+        # para evitar "Ghost Spend" (limite consumido por transação que falhou).
+        # Se negar, levanta RiskEngineDenied (403) e o SQLAlchemy faz rollback do débito acima.
+        self.risk_connector.evaluate_transaction(
+            customer_key=authenticated_customer_key,
+            amount=payload.get("amount", 0),
+            transaction_type=payload.get("channel")
+        )
 
         transaction_data = {
             "origin_account": origin_account,

@@ -13,8 +13,9 @@ class RiskEngineConnector:
         Consulta o score de risco do cliente.
 
         Chama o Risk Engine sincronicamente para avaliar a transação contra
-        a política de limites do score do cliente (ex: MEDIUM = R$10k).
-        Se houver falha de rede (timeout/indisponibilidade), adota Fail-Open.
+        a política de limites do score do cliente (ex: HIGH = R$1k).
+        Se houver falha de rede (timeout/indisponibilidade), entra em Degraded
+        Mode: transações acima de R$1000 são bloqueadas por segurança.
         """
         try:
             payload = {
@@ -32,5 +33,10 @@ class RiskEngineConnector:
         except requests.exceptions.RequestException as e:
             self.logger.warning(
                 f"Risk Engine Connector indisponível ou lento: {e}. "
-                "Transação prosseguindo por resiliência (Fail-Open)."
+                "Transação prosseguindo em Degraded Mode (limite de R$ 1000)."
             )
+            # Em vez de liberar qualquer valor (Fail-Open), aplicamos um
+            # limite restrito de fallback.
+            DEGRADED_MODE_LIMIT = 100000 # R$ 1000 em centavos
+            if amount > DEGRADED_MODE_LIMIT:
+                raise RiskEngineDenied("Transação negada pois excede o limite restrito do modo de segurança.")

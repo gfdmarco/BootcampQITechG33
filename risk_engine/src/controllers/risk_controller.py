@@ -55,18 +55,16 @@ class RiskController:
         profile = self.repository.get_profile(customer_key)
 
         if profile is None:
-            score_enumerator = RiskScoreStatus.UNKNOWN
-            score_status = (
-                self.repository.session.query(RiskScoreStatus)
-                .filter(RiskScoreStatus.enumerator == score_enumerator)
-                .first()
-            )
-            score_id = score_status.id
-        else:
-            score_enumerator = profile.risk_score.enumerator
-            score_id         = profile.risk_score_id
+            # Cria o perfil inicial como UNKNOWN para o cliente, assim
+            # o LLM Worker conseguirá descobri-lo nas próximas execuções.
+            profile = self.repository.upsert_profile(customer_key, RiskScoreStatus.UNKNOWN, "Perfil inicial criado via evaluate")
+            self.context.db_session.commit()
+            self.context.db_session.refresh(profile)
 
-        # Carrega TODOS os limites desse score de uma vez (transfer, deposit...)
+        score_enumerator = profile.risk_score.enumerator
+        score_id         = profile.risk_score_id
+
+        # Carrega TODOS os limites desse score de uma vez (pix, ted, card...)
         policies = self.repository.get_all_limit_policies(score_id)
         limits = {
             p.transaction_type: {
