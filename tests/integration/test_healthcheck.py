@@ -1,5 +1,6 @@
 from tests.utils import INTERNAL_TOKEN
 from tests.utils.requisition import ClientRequisition
+from tests.utils import PayloadGenerator, RequestGenerator
 
 
 # As frases em português que o cliente lê no campo "translation" das
@@ -13,6 +14,16 @@ from tests.utils.requisition import ClientRequisition
 # aquela linha deixa o teste abaixo vermelho, nomeando o campo.
 FORBIDDEN_TRANSLATION = "Requisição precisa ser interna"
 NOT_FOUND_TRANSLATION = "O resource solicitado não pode ser encontrado, mas pode estar disponível no futuro. Requests subsequentes do cliente são permitidos."
+
+def _access_token() -> str:
+    payload = PayloadGenerator.create_customer_payload()
+    status, _ = RequestGenerator.POST_customer(payload)
+    assert status == 201
+    _, login = RequestGenerator.POST_auth_login({
+        "document_number": payload["document_number"],
+        "password": payload["password"],
+    })
+    return login["access_token"]
 
 
 class TestHealthCheck:
@@ -33,7 +44,10 @@ class TestHealthCheck:
         response = ClientRequisition.send(
             "PUT",
             "/sample",
-            headers={"INTERNAL-TOKEN": INTERNAL_TOKEN},
+            headers={
+                "INTERNAL-TOKEN": INTERNAL_TOKEN,
+                "Authorization": f"Bearer {_access_token()}",
+            },
         )
         assert response.response_status == 404
         assert response.response_json["code"] == "QIT000404"
@@ -63,8 +77,16 @@ class TestHealthCheck:
         response = ClientRequisition.send(
             "PUT",
             "/sample",
-            headers={"INTERNAL-TOKEN": INTERNAL_TOKEN},
+            headers={
+                "INTERNAL-TOKEN": INTERNAL_TOKEN,
+                "Authorization": f"Bearer {_access_token()}",
+            },
         )
         assert response.response_status == 404
         assert response.response_json["code"] == "QIT000404"
         assert response.response_json["translation"] == NOT_FOUND_TRANSLATION
+
+    def test_unknown_route_without_jwt_returns_401(self):
+        response = ClientRequisition.send("PUT", "/sample", headers={"INTERNAL-TOKEN": INTERNAL_TOKEN})
+        assert response.response_status == 401
+        assert response.response_json["code"] == "QIT002002"

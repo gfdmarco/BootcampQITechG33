@@ -123,8 +123,8 @@ class TransactionController(BaseController):
             fee_amount = (int(payload["amount"]) * fee_obj.percentage) // 100
             total_debit = int(payload["amount"]) + fee_amount
 
-            # Débito atômico: ou desconta tudo, ou nada é gravado.
-            amount = int(payload["amount"])
+
+            amount = payload["amount"]
             if origin_account.id < destination_account.id:
                 if not self.account_repository.debit(origin_account.id, total_debit):
                     raise InsufficientBalance()
