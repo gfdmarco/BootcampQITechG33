@@ -5,19 +5,18 @@ Roda assincronamente (a cada 6h via APScheduler) para classificar
 o perfil de risco de cada cliente com base no histórico de transações.
 
 Fluxo:
-  1. Busca todos os customer_keys conhecidos no db_risk (risk_profile).
+  1. Busca customer_keys que precisam de reavaliação (há > 24h ou UNKNOWN).
   2. Para cada cliente, consulta o extrato de 30 dias no Core API.
-  3. Resume o histórico e envia para Groq (Llama 3) classificar o risco.
+  3. Resume o histórico e envia para Groq (Llama 3) classificar o risco (c/ retries).
   4. Atualiza o risk_profile via PATCH /risk_profile/{key} no Risk Engine.
-     → O endpoint de PATCH já sincroniza o Redis automaticamente.
-
-Clientes sem transações: score mantido como UNKNOWN.
-Groq indisponível: worker loga o erro e pula o cliente (tenta no próximo ciclo).
 """
 
 import os
+import time
 import logging
 import requests
+import re
+from datetime import datetime, timezone, timedelta
 from groq import Groq
 
 logger = logging.getLogger(__name__)
@@ -33,19 +32,16 @@ INTERNAL_TOKEN     = os.getenv("INTERNAL_TOKEN", "risk_default_token")
 STATEMENT_DAYS     = 30
 STATEMENT_LIMIT    = 50  # máx de transações analisadas por cliente
 
-# ── Prompt ──────────────────────────────────────────────────────────────────
+# ── Prompt Otimizado ────────────────────────────────────────────────────────
 CLASSIFICATION_PROMPT = """
-Você é um analista de risco de um banco digital. Analise o histórico de
-transações financeiras abaixo e classifique o perfil de risco do cliente
-como exatamente uma dessas três palavras: low, medium ou high.
+Você é um analista antifraude experiente.
+Analise o extrato abaixo e classifique o risco do cliente.
+Critérios de Risco:
+- LOW: Transações de baixo valor, padrões consistentes, focado em PIX/TED local.
+- MEDIUM: Transações de valor moderado, picos ocasionais.
+- HIGH: Valores excessivamente altos atípicos, uso frequente do canal "international", ou muitas transações suspeitas.
 
-Critérios:
-- low: transações regulares, valores consistentes, sem picos atípicos.
-- medium: alguns picos de valor, padrão misto ou histórico curto.
-- high: transferências de alto valor atípicas, muitas transações em pouco
-  tempo, padrão inconsistente ou suspeito.
-
-Responda APENAS com uma das três palavras, sem pontuação ou explicação.
+Responda APENAS com a palavra: low, medium ou high.
 
 Histórico (últimas {n} transações):
 {history}
@@ -57,11 +53,11 @@ class LLMClassifier:
         self.groq_client = Groq(api_key=GROQ_API_KEY)
         self.headers = {"INTERNAL-TOKEN": INTERNAL_TOKEN}
 
-    # ── Busca clientes a classificar ────────────────────────────────────────
+    # ── Busca clientes a classificar (Custo & Escala) ───────────────────────
     def _fetch_customers_to_evaluate(self) -> list[str]:
         """
-        Retorna todos os customer_keys do db_risk ordenados pelo mais antigo.
-        Clientes novos (sem profile) serão inseridos na primeira chamada ao /evaluate.
+        Retorna clientes cujo score é 'unknown' ou cuja última avaliação
+        foi há mais de 24 horas para economizar custos de LLM.
         """
         try:
             resp = requests.get(
@@ -70,19 +66,35 @@ class LLMClassifier:
                 timeout=5
             )
             if resp.status_code == 200:
-                return [p["customer_key"] for p in resp.json().get("profiles", [])]
+                profiles = resp.json().get("profiles", [])
+                to_evaluate = []
+                now = datetime.now(timezone.utc)
+                
+                for p in profiles:
+                    if p["score"] == "unknown":
+                        to_evaluate.append(p["customer_key"])
+                        continue
+                        
+                    try:
+                        # Parsing the ISO format
+                        dt_str = p.get("last_evaluated_at", "")
+                        last_eval = datetime.fromisoformat(dt_str.replace("Z", "+00:00"))
+                        if last_eval.tzinfo is None:
+                            last_eval = last_eval.replace(tzinfo=timezone.utc)
+                            
+                        if (now - last_eval) > timedelta(hours=24):
+                            to_evaluate.append(p["customer_key"])
+                    except Exception:
+                        to_evaluate.append(p["customer_key"])
+
+                return to_evaluate
         except requests.RequestException as e:
             logger.error(f"Falha ao buscar perfis do Risk Engine: {e}")
         return []
 
     # ── Busca histórico de transações no Core ───────────────────────────────
     def _fetch_transaction_history(self, customer_key: str) -> list[dict]:
-        """
-        Chama o Core API internamente para obter o extrato de 30 dias.
-        Usa INTERNAL-TOKEN — não precisa de JWT do cliente.
-        """
         try:
-            # Busca contas do cliente via rota interna
             accounts_resp = requests.get(
                 f"{CORE_API_URL}/accounts",
                 headers={**self.headers, "customer_key": customer_key},
@@ -120,7 +132,7 @@ class LLMClassifier:
 
         lines = []
         for tx in transactions:
-            amount_brl = tx.get("amount", 0) / 100  # centavos → reais
+            amount_brl = tx.get("amount", 0) / 100
             fee_brl    = tx.get("fee_amount", 0) / 100
             lines.append(
                 f"- {tx.get('type','?')} via {tx.get('channel','?')} | "
@@ -129,24 +141,42 @@ class LLMClassifier:
             )
         return "\n".join(lines)
 
-    # ── Classifica via Groq ─────────────────────────────────────────────────
+    # ── Classifica via Groq (Fault Tolerance & Otimização) ──────────────────
     def _classify_with_llm(self, history_summary: str, n: int) -> str:
         prompt = CLASSIFICATION_PROMPT.format(history=history_summary, n=n)
-        try:
-            response = self.groq_client.chat.completions.create(
-                model=GROQ_MODEL,
-                messages=[{"role": "user", "content": prompt}],
-                max_tokens=5,
-                temperature=0.0  # determinístico para decisões financeiras
-            )
-            score = response.choices[0].message.content.strip().lower()
-            if score not in {"low", "medium", "high"}:
-                logger.warning(f"Groq retornou valor inesperado: '{score}'. Usando 'unknown'.")
-                return "unknown"
-            return score
-        except Exception as e:
-            logger.error(f"Groq indisponível: {e}")
-            return None  # None = pular este cliente, tentar no próximo ciclo
+        
+        max_retries = 3
+        backoff_factor = 2
+        
+        for attempt in range(max_retries):
+            try:
+                response = self.groq_client.chat.completions.create(
+                    model=GROQ_MODEL,
+                    messages=[
+                        {"role": "system", "content": "Você é um classificador de risco. Responda APENAS com uma palavra estritamente: low, medium, ou high."},
+                        {"role": "user", "content": prompt}
+                    ],
+                    max_tokens=5,
+                    temperature=0.0
+                )
+                score = response.choices[0].message.content.strip().lower()
+                
+                # Remove qualquer pontuação vazada da IA
+                score = re.sub(r'[^a-z]', '', score)
+                
+                if score not in {"low", "medium", "high"}:
+                    logger.warning(f"Groq retornou valor inesperado: '{score}'. Usando 'unknown'.")
+                    return "unknown"
+                    
+                return score
+                
+            except Exception as e:
+                wait = backoff_factor ** attempt
+                logger.warning(f"Groq indisponível (tentativa {attempt + 1}/{max_retries}). Aguardando {wait}s: {e}")
+                time.sleep(wait)
+                
+        logger.error("Groq permanentemente indisponível após retentativas.")
+        return None
 
     # ── Atualiza o Risk Engine ───────────────────────────────────────────────
     def _update_risk_profile(self, customer_key: str, score: str, reason: str) -> None:
@@ -169,7 +199,7 @@ class LLMClassifier:
             return
 
         customer_keys = self._fetch_customers_to_evaluate()
-        logger.info(f"{len(customer_keys)} clientes para avaliar.")
+        logger.info(f"{len(customer_keys)} clientes precisam de reavaliação.")
 
         for customer_key in customer_keys:
             transactions  = self._fetch_transaction_history(customer_key)
@@ -177,11 +207,11 @@ class LLMClassifier:
             score         = self._classify_with_llm(summary, len(transactions))
 
             if score is None:
-                logger.warning(f"Pulando {customer_key} — Groq indisponível.")
+                logger.error(f"Abortando atualização para {customer_key} devido a falha permanente no Groq.")
                 continue
 
-            reason = f"LLM ({GROQ_MODEL}) classificou com base em {len(transactions)} transações."
+            reason = f"LLM ({GROQ_MODEL}) classificou com base em {len(transactions)} transações via heurística de reavaliação."
             self._update_risk_profile(customer_key, score, reason)
-            logger.info(f"Cliente {customer_key} → score: {score}")
+            logger.info(f"Cliente {customer_key} → score atualizado para: {score}")
 
         logger.info("LLM Classifier Worker finalizado.")

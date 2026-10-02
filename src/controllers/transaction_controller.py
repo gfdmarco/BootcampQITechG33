@@ -61,7 +61,7 @@ class TransactionController(BaseController):
         self.risk_connector.evaluate_transaction(
             customer_key=authenticated_customer_key,
             amount=payload.get("amount", 0),
-            transaction_type=payload.get("type")
+            transaction_type=payload.get("channel")
         )
 
         transaction_type = payload.get("type")

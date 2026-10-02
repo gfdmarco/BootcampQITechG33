@@ -61,3 +61,28 @@ class RedisCacheConnector:
             self.client.delete(f"risk:eval:{customer_key}")
         except redis.RedisError as e:
             logger.warning(f"Redis DELETE falhou para 'risk:eval:{customer_key}': {e}")
+
+    def _get_daily_key(self, customer_key: str, transaction_type: str) -> str:
+        import datetime
+        today = datetime.datetime.now().strftime("%Y-%m-%d")
+        return f"risk:daily:{today}:{customer_key}:{transaction_type}"
+
+    def get_daily_spend(self, customer_key: str, transaction_type: str) -> int:
+        key = self._get_daily_key(customer_key, transaction_type)
+        try:
+            val = self.client.get(key)
+            return int(val) if val else 0
+        except redis.RedisError as e:
+            logger.warning(f"Redis GET falhou para '{key}': {e}")
+            return 0
+
+    def increment_daily_spend(self, customer_key: str, transaction_type: str, amount: int) -> None:
+        key = self._get_daily_key(customer_key, transaction_type)
+        try:
+            # Incrementa e define expiração de 24h caso a chave seja nova
+            pipe = self.client.pipeline()
+            pipe.incrby(key, amount)
+            pipe.expire(key, 24 * 60 * 60)
+            pipe.execute()
+        except redis.RedisError as e:
+            logger.warning(f"Redis INCRBY falhou para '{key}': {e}")

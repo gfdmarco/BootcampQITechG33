@@ -36,7 +36,7 @@ class RiskController:
         cached = self.cache.get_evaluation_cache(customer_key)
         if cached is not None:
             logger.debug(f"Cache HIT para {customer_key}")
-            return self._decide(cached, amount, transaction_type)
+            return self._decide(cached, amount, transaction_type, customer_key)
 
         # ── Camada 2: Banco de Dados (fallback) ──
         logger.debug(f"Cache MISS para {customer_key}, consultando Postgres")
@@ -45,7 +45,7 @@ class RiskController:
         # Popula o cache para as próximas chamadas
         self.cache.set_evaluation_cache(customer_key, eval_data)
 
-        return self._decide(eval_data, amount, transaction_type)
+        return self._decide(eval_data, amount, transaction_type, customer_key)
 
     def _build_evaluation_data(self, customer_key: str) -> dict:
         """
@@ -78,18 +78,30 @@ class RiskController:
 
         return {"score": score_enumerator, "limits": limits}
 
-    def _decide(self, eval_data: dict, amount: int, transaction_type: str) -> dict:
+    def _decide(self, eval_data: dict, amount: int, transaction_type: str, customer_key: str) -> dict:
         """Aplica a política de limites sobre os dados de avaliação."""
         score  = eval_data["score"]
         limits = eval_data.get("limits", {})
         policy = limits.get(transaction_type)
 
-        if policy and amount > policy["max_amount_per_tx"]:
-            reason = (
-                f"LIMIT_EXCEEDED: amount {amount} exceeds max "
-                f"{policy['max_amount_per_tx']} for score {score}"
-            )
-            return EvaluationDTO.denied(score, reason)
+        if policy:
+            if amount > policy["max_amount_per_tx"]:
+                reason = (
+                    f"LIMIT_EXCEEDED: amount {amount} exceeds max per tx "
+                    f"{policy['max_amount_per_tx']} for score {score}"
+                )
+                return EvaluationDTO.denied(score, reason)
+
+            daily_spend = self.cache.get_daily_spend(customer_key, transaction_type)
+            if amount + daily_spend > policy["max_amount_daily"]:
+                reason = (
+                    f"DAILY_LIMIT_EXCEEDED: amount {amount} + daily spend {daily_spend} "
+                    f"exceeds max daily {policy['max_amount_daily']} for score {score}"
+                )
+                return EvaluationDTO.denied(score, reason)
+                
+            # Increments optimistic daily spend (we assume it succeeds)
+            self.cache.increment_daily_spend(customer_key, transaction_type, amount)
 
         return EvaluationDTO.approved(score)
 

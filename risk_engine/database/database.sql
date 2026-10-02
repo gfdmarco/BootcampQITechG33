@@ -42,11 +42,19 @@ CREATE TABLE risk_limit_policy (
 );
 -- Defaults: LOW = sem restrição, MEDIUM = R$10k, HIGH = R$1k por transação
 INSERT INTO risk_limit_policy (risk_score_id, transaction_type, max_amount_per_tx, max_amount_daily) VALUES
-    (1, 'transfer',    999999999, 999999999),
-    (1, 'deposit',     999999999, 999999999),
-    (2, 'transfer',    1000000,   2000000),
-    (2, 'deposit',     999999999, 999999999),
-    (3, 'transfer',    100000,    200000),
-    (3, 'deposit',     999999999, 999999999),
-    (4, 'transfer',    1000000,   2000000),
-    (4, 'deposit',     999999999, 999999999);
+    (1, 'pix',             999999999, 999999999),
+    (1, 'ted',             999999999, 999999999),
+    (1, 'card',            999999999, 999999999),
+    (1, 'international',   999999999, 999999999),
+    (2, 'pix',             1000000,   2000000),
+    (2, 'ted',             1000000,   2000000),
+    (2, 'card',            1000000,   2000000),
+    (2, 'international',   500000,    1000000),
+    (3, 'pix',             100000,    200000),
+    (3, 'ted',             100000,    200000),
+    (3, 'card',            100000,    200000),
+    (3, 'international',   0,         0),
+    (4, 'pix',             1000000,   2000000),
+    (4, 'ted',             1000000,   2000000),
+    (4, 'card',            1000000,   2000000),
+    (4, 'international',   500000,    1000000);
