@@ -1,0 +1,1 @@
+from resources.risk_resource import RiskResource

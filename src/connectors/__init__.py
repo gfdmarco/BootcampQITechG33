@@ -1,1 +1,3 @@
 from connectors.bankslip_connector import BankSlipConnector
+from connectors.risk_engine_connector import RiskEngineConnector
+from connectors.redis_connector import RedisCacheConnector

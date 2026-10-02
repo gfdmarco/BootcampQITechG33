@@ -238,7 +238,28 @@ def create_app() -> FastAPI:
         methods=["GET"],
     )
 
+    # ────────────────────────────────────────────────────────────────
+    # Rotas de Empréstimos
+    # ────────────────────────────────────────────────────────────────
+    loan_resource = LoanResource()
 
+    application.add_api_route(
+        "/loans/simulate",
+        loan_resource.on_post_simulate,
+        methods=["POST"],
+    )
+
+    application.add_api_route(
+        "/loans",
+        loan_resource.on_post,
+        methods=["POST"],
+    )
+
+    application.add_api_route(
+        "/loans/{loan_key}/installments/{installment_id}/pay",
+        loan_resource.on_post_pay_installment,
+        methods=["POST"],
+    )
 
     application.add_api_route(
         "/sample_entity",
