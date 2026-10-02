@@ -70,7 +70,7 @@ class LoanController(BaseController):
             "installments": installments
         }
 
-    def create_loan(self, account_key: str, requested_amount: int, installments_count: int, authenticated_customer_key: str) -> Loan:
+    def create_loan(self, account_key: str, requested_amount: int, installments_count: int, authenticated_customer_key: str) -> dict:
         """Disburses a loan to the account after risk approval."""
         
         # Reuse simulation logic for pure math and risk evaluation
@@ -103,7 +103,23 @@ class LoanController(BaseController):
         
         self.session.add(loan)
         self.session.commit()
-        return loan
+        
+        return {
+            "loan_key": loan.loan_key,
+            "requested_amount": loan.requested_amount,
+            "total_amount_due": loan.total_amount_due,
+            "interest_rate": loan.interest_rate,
+            "installments": [
+                {
+                    "id": inst.id,
+                    "installment_number": inst.installment_number,
+                    "amount": inst.amount,
+                    "due_date": inst.due_date.isoformat(),
+                    "status": inst.status
+                }
+                for inst in loan.installments
+            ]
+        }
 
     def pay_installment(self, loan_key: str, installment_id: int, authenticated_customer_key: str) -> None:
         """Collects money for an installment via debit."""

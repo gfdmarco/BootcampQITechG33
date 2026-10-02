@@ -55,12 +55,12 @@ class TestLoanEndpoints:
         status, response = self.POST_simulate_loan(payload, token)
         assert status == 200
         
-        # Risk engine will be down/not mocked here, fallback is unknown -> 3% interest -> 103000 total.
+        # Risk engine will return "low" (1.5% interest) because customer_key doesn't start with "high"
         assert "total_amount_due" in response
         assert "installments" in response
         assert len(response["installments"]) == 3
-        assert response["total_amount_due"] == 103000
-        assert response["installments"][0]["amount"] == 34333
+        assert response["total_amount_due"] == 101500
+        assert response["installments"][0]["amount"] == 33833
 
     def test_create_loan_success(self):
         """201; creates a loan and credits account"""
@@ -107,7 +107,8 @@ class TestLoanEndpoints:
         deposit_payload = {
             "type": "deposit",
             "amount": 10000,
-            "destination_account_key": account_key
+            "destination_account_key": account_key,
+            "channel": "pix"
         }
         status, _ = RequestGenerator.POST_transaction(deposit_payload, token)
         assert status == 201

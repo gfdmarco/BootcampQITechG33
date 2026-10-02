@@ -76,13 +76,13 @@ class TestLoanControllerDirect:
             authenticated_customer_key=customer_key
         )
         
-        assert loan.requested_amount == 100000
-        assert loan.total_amount_due == 101500  # 1.5% de juros
-        assert loan.interest_rate == 15
-        assert len(loan.installments) == 3
+        assert loan["requested_amount"] == 100000
+        assert loan["total_amount_due"] == 101500  # 1.5% de juros
+        assert loan["interest_rate"] == 15
+        assert len(loan["installments"]) == 3
         
         # Divisão das parcelas: 101500 / 3 = 33833.33 -> 33833, 33833, 33834
-        assert loan.installments[0].amount == 33833
-        assert loan.installments[1].amount == 33833
-        assert loan.installments[2].amount == 33834
-        assert loan.installments[0].status == "pending"
+        assert loan["installments"][0]["amount"] == 33833
+        assert loan["installments"][1]["amount"] == 33833
+        assert loan["installments"][2]["amount"] == 33834
+        assert loan["installments"][0]["status"] == "pending"
