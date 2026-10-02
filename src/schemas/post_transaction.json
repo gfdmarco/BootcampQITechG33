@@ -27,7 +27,8 @@
             "pix",
             "ted",
             "card",
-            "international"
+            "international",
+            "bank_slip"
         ]
         }
     },

@@ -157,6 +157,15 @@ class NotFoundCustomer(QIException):
         translation = f"O cliente com chave {customer_key} não foi encontrado."
         super().__init__(title, self.code, http_status, description, translation)
 
+class NotFoundBankSlip(QIException):
+    code = "QIT001024"
+
+    def __init__(self, bank_slip_key) -> None:
+            title = "Bank Slip not Found"
+            http_status = 404
+            description = f"Bank Slip with key {bank_slip_key} was not found."
+            translation = f"O boleto com chave {bank_slip_key} não foi encontrado."
+            super().__init__(title, self.code, http_status, description, translation)
 
 class CustomerAccountLimitReached(QIException):
     code = "QIT001013"
@@ -287,6 +296,26 @@ class CustomerHasBalance(QIException):
         translation = "Não é possível encerrar o cadastro. Há saldo em alguma conta. Por favor, transfira seu dinheiro."
         super().__init__(title, self.code, http_status, description, translation)
 
+class InvalidExpirationDate(QIException):
+    code = "QIT001025"
+
+    def __init__ (self) -> None:
+        title = "Invalid Expiration Date"
+        http_status = 422
+        description = f"The expiration date sent is invalid."
+        translation = "A data inserida para expirar o boleto é inválida."
+        super().__init__(title, self.code, http_status, description, translation)
+
+class BankSlipNotPayable(QIException):
+    code = "QIT001026"          # ← o próximo livre na sua numeração
+
+    def __init__(self, bank_slip_key, current_status) -> None:
+        title = "Bank Slip Not Payable"
+        http_status = 409
+        description = f"Bank slip {bank_slip_key} cannot be paid: it is {current_status}."
+        translation = f"O boleto {bank_slip_key} não pode ser pago: está {current_status}."
+        super().__init__(title, self.code, http_status, description, translation)
+
 # ──────────────────────────────────────────────────────────────────────────────
 # QIT002xxx — Domínio de Segurança (Autenticação e Autorização)
 # ──────────────────────────────────────────────────────────────────────────────
@@ -334,6 +363,23 @@ class ForbiddenAction(QIException):
         translation = "Você não tem permissão para acessar ou modificar este recurso."
         super().__init__(title, self.code, http_status, description, translation)
 
+
+# ──────────────────────────────────────────────────────────────────────────────
+# QIT003xxx — Erros de conexão externa
+# ──────────────────────────────────────────────────────────────────────────────
+
+class BankSlipProviderUnavailable(QIException):
+    """Servidor externo indisponível"""
+    
+    code = "QIT003001"
+
+    def __init__(self) -> None:
+        title = "Bank Slip Provider Unavaiable"
+        http_status = 503
+        description = "The access to the external bank slip provider could not be done."
+        translation = "O acesso para o serviço externo de boletos está indisponível."
+        
+        
 class InvalidCNPJ(QIException):
     code = "QIT004001"
 

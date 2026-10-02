@@ -3,4 +3,5 @@ from controllers.customer_controller import CustomerController
 from controllers.account_controller import AccountController
 from controllers.auth_controller import AuthController
 from controllers.transaction_controller import TransactionController
+from controllers.bank_slip_controller import BankSlipController
 from controllers.corporate_controller import CorporateController
