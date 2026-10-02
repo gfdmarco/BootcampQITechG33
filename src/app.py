@@ -10,7 +10,7 @@ from middlewares import (
     register_session_manager_middleware,
     register_jwt_middleware,
 )
-from resources import HealthCheckResource, SampleEntityResource, CustomerResource, AccountResource, TransactionResource, NotificationResource
+from resources import HealthCheckResource, SampleEntityResource, CustomerResource, AccountResource, TransactionResource, LoanResource
 from utils.logger import setup_logging
 
 
@@ -239,23 +239,27 @@ def create_app() -> FastAPI:
     )
 
     # ────────────────────────────────────────────────────────────────
-    # Rotas de Notificações
+    # Rotas de Empréstimos
     # ────────────────────────────────────────────────────────────────
-    notification_resource = NotificationResource()
+    loan_resource = LoanResource()
 
     application.add_api_route(
-        "/notifications",
-        notification_resource.on_get_list,
-        methods=["GET"],
+        "/loans/simulate",
+        loan_resource.on_post_simulate,
+        methods=["POST"],
     )
 
     application.add_api_route(
-        "/notifications/{key}/read",
-        notification_resource.on_patch_read,
-        methods=["PATCH"],
+        "/loans",
+        loan_resource.on_post,
+        methods=["POST"],
     )
 
-
+    application.add_api_route(
+        "/loans/{loan_key}/installments/{installment_id}/pay",
+        loan_resource.on_post_pay_installment,
+        methods=["POST"],
+    )
 
     application.add_api_route(
         "/sample_entity",

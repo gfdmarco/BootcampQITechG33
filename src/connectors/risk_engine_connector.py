@@ -1,50 +1,40 @@
-import requests
-import os
+from connectors.rest_connector import BaseConnectorResponse, RestConnector
+from constants import RISK_ENGINE_URL, RISK_INTERNAL_TOKEN, RISK_ENGINE_TIMEOUT
 import logging
-from errors import RiskEngineDenied
 
-class RiskEngineConnector:
-    def __init__(self):
-        self.risk_url = os.getenv("RISK_ENGINE_URL", "http://risk_engine:3000")
-        self.logger = logging.getLogger(__name__)
+logger = logging.getLogger(__name__)
 
-    def evaluate_transaction(self, customer_key: str, amount: int, transaction_type: str) -> None:
+class RiskEngineConnector(RestConnector):
+    """
+    Fala com a API do Motor de Risco.
+    
+    Consulta o perfil de risco de um cliente passando a customer_key.
+    Retorna o score (low, medium, high, ou unknown em caso de falha).
+    """
+
+    def __init__(self) -> None:
+        super().__init__(
+            class_name=__name__,
+            base_url=RISK_ENGINE_URL,
+            timeout=RISK_ENGINE_TIMEOUT,
+            internal_token=RISK_INTERNAL_TOKEN,
+        )
+
+    def get_customer_risk_score(self, customer_key: str) -> str:
         """
-        Consulta o score de risco do cliente.
-
-        Chama o Risk Engine sincronicamente para avaliar a transação contra
-        a política de limites do score do cliente (ex: HIGH = R$1k).
-        Se houver falha de rede (timeout/indisponibilidade), entra em Degraded
-        Mode: transações acima de R$1000 são bloqueadas por segurança.
+        Busca o score de risco do cliente.
+        Se ocorrer um erro de conexão, timeout, ou a API não responder com sucesso (2xx),
+        fallback para "unknown".
         """
         try:
-            payload = {
-                "customer_key": customer_key,
-                "amount": amount,
-                "transaction_type": transaction_type
-            }
-            headers = {
-                "INTERNAL-TOKEN": os.getenv("RISK_INTERNAL_TOKEN", "risk_default_token")
-            }
-            response = requests.post(f"{self.risk_url}/evaluate", json=payload, headers=headers, timeout=2)
-
-            if response.status_code == 200:
-                data = response.json()
-                if data.get("action") == "DENY":
-                    raise RiskEngineDenied(data.get("reason", "Denied by Risk Engine Policy"))
-            elif response.status_code == 403:
-                self.logger.error("Risk Engine retornou 403 Forbidden. Verifique o RISK_INTERNAL_TOKEN.")
-                # Se for 403, falhou autenticação com o Sidecar, trata como indisponibilidade (Degraded Mode)
-                raise requests.exceptions.RequestException("Risk Engine Authentication Failed")
-
-
-        except requests.exceptions.RequestException as e:
-            self.logger.warning(
-                f"Risk Engine Connector indisponível ou lento: {e}. "
-                "Transação prosseguindo em Degraded Mode (limite de R$ 1000)."
-            )
-            # Em vez de liberar qualquer valor (Fail-Open), aplicamos um
-            # limite restrito de fallback.
-            DEGRADED_MODE_LIMIT = 100000 # R$ 1000 em centavos
-            if amount > DEGRADED_MODE_LIMIT:
-                raise RiskEngineDenied("Transação negada pois excede o limite restrito do modo de segurança.")
+            response = self.send(endpoint=f"/risk_profile/{customer_key}", method="GET")
+            
+            if response.status == 200 and response.json:
+                return response.json.get("score", "unknown")
+                
+            logger.warning(f"Risco não pôde ser calculado para {customer_key}. Fallback para 'unknown'.")
+            return "unknown"
+            
+        except Exception as e:
+            logger.error(f"Erro ao consultar Risk Engine para {customer_key}: {e}. Fallback para 'unknown'.")
+            return "unknown"
