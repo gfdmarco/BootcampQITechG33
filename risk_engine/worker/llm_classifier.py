@@ -28,6 +28,7 @@ GROQ_MODEL         = os.getenv("GROQ_MODEL", "llama-3.1-8b-instant")
 CORE_API_URL       = os.getenv("CORE_API_URL", "http://api:3000")
 RISK_ENGINE_URL    = os.getenv("RISK_ENGINE_URL", "http://risk_engine:3000")
 INTERNAL_TOKEN     = os.getenv("INTERNAL_TOKEN", "risk_default_token")
+CORE_INTERNAL_TOKEN = os.getenv("CORE_INTERNAL_TOKEN", "default_token")
 
 STATEMENT_DAYS     = 30
 STATEMENT_LIMIT    = 50  # máx de transações analisadas por cliente
@@ -94,33 +95,23 @@ class LLMClassifier:
 
     # ── Busca histórico de transações no Core ───────────────────────────────
     def _fetch_transaction_history(self, customer_key: str) -> list[dict]:
+        """Histórico de 30 dias do cliente, lido da rota interna do Core."""
         try:
-            accounts_resp = requests.get(
-                f"{CORE_API_URL}/accounts",
-                headers={**self.headers, "customer_key": customer_key},
-                params={"limit": 10, "page": 1},
-                timeout=5
+            resp = requests.get(
+                f"{CORE_API_URL}/internal/customers/{customer_key}/transactions",
+                headers={
+                    "INTERNAL-TOKEN": CORE_INTERNAL_TOKEN,
+                    "RISK-WORKER-TOKEN": INTERNAL_TOKEN,
+                },
+                params={"days": STATEMENT_DAYS, "limit": STATEMENT_LIMIT},
+                timeout=5,
             )
-            if accounts_resp.status_code != 200:
-                return []
-
-            accounts = accounts_resp.json().get("accounts", [])
-            transactions = []
-
-            for account in accounts:
-                stmt_resp = requests.get(
-                    f"{CORE_API_URL}/accounts/{account['account_key']}/statement",
-                    headers=self.headers,
-                    params={"limit": STATEMENT_LIMIT, "page": 1},
-                    timeout=5
+            if resp.status_code != 200:
+                logger.warning(
+                    f"Core respondeu {resp.status_code} ao buscar histórico de {customer_key}."
                 )
-                if stmt_resp.status_code == 200:
-                    transactions.extend(
-                        stmt_resp.json().get("transactions_list", [])
-                    )
-
-            return transactions[:STATEMENT_LIMIT]
-
+                return []
+            return resp.json().get("transactions", [])
         except requests.RequestException as e:
             logger.warning(f"Falha ao buscar histórico do cliente {customer_key}: {e}")
             return []

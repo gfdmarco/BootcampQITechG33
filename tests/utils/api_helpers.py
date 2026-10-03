@@ -1,4 +1,6 @@
 import os
+from datetime import date, datetime
+from zoneinfo import ZoneInfo
 from uuid import uuid4
 
 import requests
@@ -84,3 +86,12 @@ def set_risk_score(customer_key: str, score: str) -> None:
         timeout=5,
     )
     assert resp.status_code == 200, f"Falha ao definir score '{score}': {resp.text}"
+
+
+def today_br() -> date:
+    """Hoje em Brasília — o mesmo "hoje" que a API usa (src/utils/clock.py).
+
+    Não use date.today() nos testes: ele devolve o dia da SUA máquina, e
+    quem roda em UTC (CI, container) vê outro dia entre 21h e meia-noite.
+    """
+    return datetime.now(ZoneInfo("America/Sao_Paulo")).date()

@@ -10,7 +10,7 @@ from middlewares import (
     register_session_manager_middleware,
     register_jwt_middleware,
 )
-from resources import HealthCheckResource, SampleEntityResource, CustomerResource, AccountResource, TransactionResource, BankSlipResource, CorporateResource, LoanResource, NotificationResource
+from resources import HealthCheckResource, CustomerResource, AccountResource, TransactionResource, BankSlipResource, CorporateResource, LoanResource, NotificationResource, InternalResource
 from utils.logger import setup_logging
 
 
@@ -125,8 +125,6 @@ def create_app() -> FastAPI:
     # se a coisa foi criada, agendada ou concluída. Esta lista diz QUEM
     # atende cada endereço, e mais nada.
     health_check_resource = HealthCheckResource()
-    sample_entity_resource = SampleEntityResource()
-
     application.add_api_route("/", health_check_resource.on_get_home, methods=["GET"])
     application.add_api_route(
         "/health_check",
@@ -260,11 +258,6 @@ def create_app() -> FastAPI:
         bank_slip_resource.on_get_by_key,
         methods=["GET"]
     )
-
-    application.add_api_route(
-        "/webhook/bank_slips/{bank_slip_key}/paid",
-        bank_slip_resource.on_post_webhook_paid,
-    )
     
     application.add_api_route(
         "/accounts/{account_key}/bank_slips",
@@ -312,29 +305,14 @@ def create_app() -> FastAPI:
         methods=["POST"],
     )
 
+    # ────────────────────────────────────────────────────────────────
+    # Rotas internas (serviço para serviço — LLM Worker do Motor de Risco)
+    # ────────────────────────────────────────────────────────────────
+    internal_resource = InternalResource()
+
     application.add_api_route(
-        "/sample_entity",
-        sample_entity_resource.on_post,
-        methods=["POST"],
-    )
-    application.add_api_route(
-        "/sample_entity/{sample_entity_key}",
-        sample_entity_resource.on_get_by_key,
-        methods=["GET"],
-    )
-    application.add_api_route(
-        "/sample_entity/{sample_entity_key}",
-        sample_entity_resource.on_put_by_key,
-        methods=["PUT"],
-    )
-    application.add_api_route(
-        "/webhook/sample_entity/{sample_entity_key}/increment_counter",
-        sample_entity_resource.on_put_increment_counter,
-        methods=["PUT"],
-    )
-    application.add_api_route(
-        "/sample_entities",
-        sample_entity_resource.on_get_list,
+        "/internal/customers/{customer_key}/transactions",
+        internal_resource.on_get_customer_transactions,
         methods=["GET"],
     )
 

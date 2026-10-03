@@ -120,3 +120,17 @@ class AccountRepository:
             .order_by(Account.id)
             .all()
         )
+
+    def get_bank_account(self) -> Account:
+        """A conta interna do banco (tesouraria). Falta dela é erro de
+        instalação, não regra de negócio: estoura em vez de seguir calado."""
+        from constants import BANK_ACCOUNT_KEY
+
+        account = self.get_by_key(BANK_ACCOUNT_KEY)
+        if account is None:
+            raise RuntimeError(
+                "Conta interna do banco não encontrada. Rode o bloco "
+                "'Conta interna do banco' do database/database.sql "
+                "(ou recrie o banco com docker compose down -v)."
+            )
+        return account
