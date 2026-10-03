@@ -1,0 +1,15 @@
+{
+  "title": "GetInternalCustomerTransactions",
+  "type": "object",
+  "properties": {
+    "days": {
+      "type": "string",
+      "pattern": "^([1-9]|[1-8][0-9]|90)$"
+    },
+    "limit": {
+      "type": "string",
+      "pattern": "^(100|[1-9][0-9]?)$"
+    }
+  },
+  "additionalProperties": false
+}

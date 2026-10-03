@@ -150,3 +150,25 @@ class TransactionRepository:
         query = query.order_by(Transaction.created_at.desc(), Transaction.id.desc())
 
         return query.limit(limit + 1).offset(offset).all()
+
+    def list_recent_by_customer(self, customer_id: int, since, limit: int) -> list:
+        """Transações em que alguma conta do cliente é origem OU destino,
+        criadas a partir de `since`, da mais nova para a mais antiga."""
+        customer_account_ids = (
+            self.session.query(Account.id)
+            .filter(Account.customer_id == customer_id)
+            .subquery()
+        )
+        return (
+            self.session.query(Transaction)
+            .filter(
+                or_(
+                    Transaction.origin_account_id.in_(customer_account_ids),
+                    Transaction.destination_account_id.in_(customer_account_ids),
+                ),
+                Transaction.created_at >= since,
+            )
+            .order_by(Transaction.created_at.desc(), Transaction.id.desc())
+            .limit(limit)
+            .all()
+        )

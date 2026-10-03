@@ -19,6 +19,10 @@ from repositories import (
     TransactionRepository,
     CustomerRepository
 )
+from datetime import datetime, timedelta
+from constants import BANK_ACCOUNT_KEY
+from utils.clock import business_now
+
 
 VALID_TRANSACTION_TYPES = ("deposit", "transfer")
 
@@ -74,6 +78,8 @@ class TransactionController(BaseController):
         destination_account = self.account_repository.get_by_key(destination_account_key)
         if destination_account is None:
             raise NotFoundAccount(destination_account_key)
+        if destination_account.account_key.strip() == BANK_ACCOUNT_KEY:
+            raise ForbiddenAction()
         if destination_account.status.enumerator != AccountStatus.ACTIVE:
             raise ForbiddenAction()
 
@@ -139,6 +145,10 @@ class TransactionController(BaseController):
                 amount=payload.get("amount", 0),
                 transaction_type=payload.get("channel")
             )
+
+        if fee_amount > 0:
+            bank_account = self.account_repository.get_bank_account()
+            self.account_repository.credit(bank_account.id, fee_amount)
 
         transaction_data = {
             "origin_account": origin_account,
@@ -274,3 +284,18 @@ class TransactionController(BaseController):
         # Impede que uma transação já confirmada ou falhada seja reaberta.
         if old_status in [TransactionStatus.CONFIRMED, TransactionStatus.FAILED]:
             raise TransactionFinalStatus(old_status, new_status)
+
+    def list_recent_for_risk(self, customer_key: str, days: int, limit: int) -> dict:
+        """Histórico recente do cliente para o LLM Worker do Motor de Risco."""
+        customer = self.customer_repository.get_by_key(customer_key)
+        if customer is None:
+            raise NotFoundCustomer(customer_key)
+
+        since = business_now() - timedelta(days=days)
+        transactions = self.transaction_repository.list_recent_by_customer(customer.id, since, limit)
+
+        return {
+            "customer_key": customer_key,
+            "days": days,
+            "transactions": [TransactionDTO.obj_to_dict(t) for t in transactions],
+        }

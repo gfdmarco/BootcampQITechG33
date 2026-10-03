@@ -1,5 +1,5 @@
 import requests 
-from tests.utils.api_helpers import balance, deposit, new_customer, open_account, transfer, call
+from tests.utils.api_helpers import balance, deposit, new_customer, open_account, transfer, call, today_br
 from datetime import date, timedelta
 from tests.utils import RequestGenerator
 import threading
@@ -56,7 +56,7 @@ class TestBankSlipEndpoints():
         assert body["status"] == "issued"
         assert len(body["barcode"]) == 47
         assert body["transaction_key"] is None
-        assert body["expiration_date"] == (date.today() + timedelta(days=3)).isoformat()
+        assert body["expiration_date"] == (today_br() + timedelta(days=3)).isoformat()
 
     def test_refuses_other_customers_account(self): 
         alice_account, _ = _customer_with_account()
@@ -76,14 +76,14 @@ class TestBankSlipEndpoints():
 
     def test_issue_with_custom_expiration(self): 
         account_key, token = _customer_with_account() 
-        expiration = (date.today() + timedelta(days=10)).isoformat() 
+        expiration = (today_br() + timedelta(days=10)).isoformat() 
         status, body = issue(account_key, token, 100, expiration) 
         assert status == 201 
         assert body["expiration_date"] == expiration 
         
     def test_refuses_expiration_in_the_past_or_too_far(self): 
         account_key, token = _customer_with_account() 
-        for expiration in [(date.today() - timedelta(days=1)).isoformat(), (date.today() + timedelta(days=61)).isoformat(), "2026-02-30"]: 
+        for expiration in [(today_br() - timedelta(days=1)).isoformat(), (today_br() + timedelta(days=61)).isoformat(), "2026-02-30"]: 
             status, body = issue(account_key, token, 100, expiration) 
             assert status == 422, expiration 
             assert body["code"] == "QIT001025"

@@ -1,9 +1,10 @@
 from datetime import date
 from tests.utils import PayloadGenerator, RandomGenerator, RequestGenerator
+from tests.utils.api_helpers import today_br
 
 
 def birthdate_for_age(age_in_years: int) -> str:
-    today = date.today()
+    today = today_br()
     if today.month == 2 and today.day == 29:
         return date(today.year - age_in_years, 2, 28).isoformat()
     return date(today.year - age_in_years, today.month, today.day).isoformat()
