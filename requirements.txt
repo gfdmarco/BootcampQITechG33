@@ -28,3 +28,7 @@ PyJWT==2.8.0
 
 # Cache distribuído — Risk score, Rate Limiting, JWT Blacklist e Fee Cache
 redis==5.0.8
+
+# Base de fusos horários para o zoneinfo (src/utils/clock.py). A imagem
+# python:slim não garante ter /usr/share/zoneinfo.
+tzdata==2024.2

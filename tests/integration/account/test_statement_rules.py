@@ -1,7 +1,7 @@
 from datetime import date, timedelta
 
 from tests.utils import RequestGenerator
-from tests.utils.api_helpers import deposit, new_customer, open_account
+from tests.utils.api_helpers import deposit, new_customer, open_account, today_br
 
 
 def _account_with_two_deposits():
@@ -21,8 +21,8 @@ class TestStatementDateFilter:
         """Tópico 13: um intervalo que contém hoje traz as transações."""
         account_key, token = _account_with_two_deposits()
         params = {
-            "date_from": (date.today() - timedelta(days=1)).isoformat(),
-            "date_to": (date.today() + timedelta(days=1)).isoformat(),
+            "date_from": (today_br() - timedelta(days=1)).isoformat(),
+            "date_to": (today_br() + timedelta(days=1)).isoformat(),
         }
 
         status, response = RequestGenerator.GET_account_statement(account_key, params, token)

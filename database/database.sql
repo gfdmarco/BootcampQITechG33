@@ -235,3 +235,34 @@ CREATE TABLE notification (
     created_at   TIMESTAMP     NOT NULL DEFAULT NOW(),
     UNIQUE(key)
 );
+
+-- ============================================
+-- Conta interna do banco (tesouraria)
+-- ============================================
+-- Recebe as tarifas das transferências e o pagamento das parcelas de
+-- empréstimo. O "cliente" dono dela é o próprio banco; ninguém loga com
+-- ele (a senha é o hash de um segredo aleatório que foi jogado fora).
+-- ON CONFLICT DO NOTHING: dá pra rodar este bloco num banco que já existe.
+INSERT INTO customer (customer_key, name, document_number, email, password_hash, birth_date, status_id)
+VALUES (
+    '00000000-0000-4000-8000-000000000001',
+    'QI Bank - Tesouraria',
+    '000.000.000-00',
+    'tesouraria@banco.interno',
+    '$2b$12$TZ4/9J0plyFccztP5OeiI.BbEZlCDU.T4ijsmVjaZ1VU.XTLmJefO',
+    '2000-01-01',
+    (SELECT id FROM customer_status WHERE enumerator = 'success')
+)
+ON CONFLICT DO NOTHING;
+
+INSERT INTO account (account_key, customer_id, branch, number, type, balance, status_id)
+VALUES (
+    '00000000-0000-4000-8000-000000000002',
+    (SELECT id FROM customer WHERE customer_key = '00000000-0000-4000-8000-000000000001'),
+    '0000',
+    '00000000-0',
+    'checking',
+    0,
+    (SELECT id FROM account_status WHERE enumerator = 'active')
+)
+ON CONFLICT DO NOTHING;

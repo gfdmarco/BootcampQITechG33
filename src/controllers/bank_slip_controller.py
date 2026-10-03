@@ -15,6 +15,7 @@ from errors import (
 )
 from models import AccountStatus, BankSlipStatus, TransactionStatus
 from repositories import AccountRepository, BankSlipRepository, TransactionRepository
+from utils.clock import business_today
 
 DEFAULT_EXPIRATION_DAYS = 3
 MAX_EXPIRATION_DAYS = 60
@@ -133,7 +134,7 @@ class BankSlipController(BaseController):
         return account
 
     def _parse_expiration(self, raw: str) -> date:
-        today = date.today()
+        today = business_today()
         if raw is None:
             return today + timedelta(days=DEFAULT_EXPIRATION_DAYS)
         try:

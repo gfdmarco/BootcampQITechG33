@@ -7,6 +7,7 @@ from models.loan_installment import LoanInstallment
 from models import AccountStatus, TransactionStatus
 from repositories import AccountRepository, TransactionRepository
 from connectors.risk_engine_connector import RiskEngineConnector
+from utils.clock import business_now
 from errors.custom_errors import HighRiskProfile, InsufficientBalanceForInstallment, InstallmentNotFound, NotFoundAccount, InvalidLoanAmount
 from errors import ForbiddenAction
 
@@ -94,7 +95,7 @@ class LoanController(BaseController):
         )
         
         # Create installments
-        now = datetime.now()
+        now = business_now()
         for i, sim_inst in enumerate(sim_data["installments"]):
             inst = LoanInstallment(
                 installment_number=sim_inst["installment_number"],
@@ -159,6 +160,23 @@ class LoanController(BaseController):
         success = self.account_repository.debit(account.id, installment.amount)
         if not success:
             raise InsufficientBalanceForInstallment()
+
+        bank_account = self.account_repository.get_bank_account()
+        self.account_repository.credit(bank_account.id, installment.amount)
+
+        payment = self.transaction_repository.create_transaction({
+            "origin_account": account,
+            "destination_account": bank_account,
+            "amount": installment.amount,
+            "fee_amount": 0,
+            "type": "transfer",
+            "channel": "loan",
+        })
+        self.transaction_repository.update_status(
+            payment,
+            TransactionStatus.CONFIRMED,
+            reason=f"Loan installment {installment.installment_number} paid",
+        )
             
         installment.status = "paid"
         

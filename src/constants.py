@@ -40,6 +40,12 @@ BYPASS_ENDPOINTS = [
     "/health_check",
 ]
 
+INTERNAL_PREFIX = "/internal/"
+
+# Conta interna do banco (tesouraria): recebe tarifas e parcelas de
+# empréstimo. Criada pelo database/database.sql com esta chave fixa.
+BANK_ACCOUNT_KEY = "00000000-0000-4000-8000-000000000002"
+
 WEBHOOK_PREFIX = "/webhook/"
 
 REQUIRED_VARIABLES = ["DATABASE_URL", "INTERNAL_TOKEN", "JWT_SECRET"]

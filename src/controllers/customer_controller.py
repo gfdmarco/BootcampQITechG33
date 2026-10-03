@@ -21,6 +21,7 @@ from repositories import CustomerRepository
 from repositories import AccountRepository
 from utils.document_number import is_valid_cpf
 from utils.account_number import generate_account_number
+from utils.clock import business_today
 
 MINIMUM_AGE = 18
 
@@ -99,8 +100,8 @@ class CustomerController(BaseController):
             account_data["number"] = generate_account_number()
             if self.account_repository.get_by_branch_and_number(account_data["branch"], account_data["number"]) is None:
                 break #conseguimos gerar um id único
-            else:
-                raise AccountNumberGenerationFailed() #quase impossível bater neste erro
+        else:
+            raise AccountNumberGenerationFailed() #quase impossível bater neste erro
 
         # Delega para o AccountController — ele valida limite e duplicidade
         from controllers.account_controller import AccountController
@@ -224,7 +225,7 @@ class CustomerController(BaseController):
             raise InvalidBirthdate(raw_birthdate)
 
     def _age_in_years(self, birthdate: date) -> int:
-        today = date.today()
+        today = business_today()
         age = today.year - birthdate.year
 
         # Quem ainda não fez aniversário este ano tem um ano a menos do

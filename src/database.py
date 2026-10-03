@@ -101,7 +101,17 @@ from sqlalchemy.orm import Session, sessionmaker
 from constants import DATABASE_URL
 
 
-engine = create_engine(DATABASE_URL, pool_size=5, pool_recycle=600, pool_pre_ping=True)
+# timezone=America/Sao_Paulo: o NOW() do Postgres (created_at de tudo) e o
+# filtro de data do extrato passam a usar o horário de Brasília, igual ao
+# src/utils/clock.py. Sem isso, uma transação das 22h aparecia no extrato
+# como sendo do dia seguinte.
+engine = create_engine(
+    DATABASE_URL,
+    pool_size=5,
+    pool_recycle=600,
+    pool_pre_ping=True,
+    connect_args={"options": "-c timezone=America/Sao_Paulo"},
+)
 
 SessionLocal = sessionmaker(bind=engine, autoflush=False)
 

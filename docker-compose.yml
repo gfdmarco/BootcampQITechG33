@@ -143,6 +143,7 @@ services:
       CORE_API_URL: ${CORE_API_URL:-http://api:3000}
       RISK_ENGINE_URL: ${RISK_ENGINE_URL:-http://risk_engine:3000}
       INTERNAL_TOKEN: ${RISK_INTERNAL_TOKEN:-risk_default_token}
+      CORE_INTERNAL_TOKEN: ${INTERNAL_TOKEN:-default_token}
       WORKER_INTERVAL_HOURS: ${WORKER_INTERVAL_HOURS:-6}
     depends_on:
       risk_engine:
@@ -150,6 +151,8 @@ services:
       db_risk:
         condition: service_healthy
       redis:
+        condition: service_healthy
+      api:
         condition: service_healthy
 
   db_risk:
