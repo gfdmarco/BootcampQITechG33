@@ -1,4 +1,7 @@
+import os
 from uuid import uuid4
+
+import requests
 
 from tests.utils.payload_generator import PayloadGenerator
 from tests.utils.request_generator import INTERNAL_TOKEN, RequestGenerator
@@ -62,3 +65,22 @@ def get_transaction(transaction_key: str, token: str):
 
 def random_key() -> str:
     return str(uuid4())
+
+
+RISK_URL = f"http://{os.environ.get('SERVER_LOCALHOST', '0.0.0.0')}:{os.environ.get('RISK_API_PORT', '8001')}"
+RISK_HEADERS = {"INTERNAL-TOKEN": os.environ.get("RISK_INTERNAL_TOKEN", "risk_default_token")}
+
+
+def set_risk_score(customer_key: str, score: str) -> None:
+    """Define o score do cliente direto no Risk Engine (low / medium / high).
+
+    Cliente novo não tem perfil no Risk Engine de verdade, e o empréstimo cai
+    no score "unknown". Testes que dependem dos juros chamam isto antes.
+    """
+    resp = requests.patch(
+        f"{RISK_URL}/risk_profile/{customer_key}",
+        json={"score": score, "reason": "Integration Test"},
+        headers=RISK_HEADERS,
+        timeout=5,
+    )
+    assert resp.status_code == 200, f"Falha ao definir score '{score}': {resp.text}"

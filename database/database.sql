@@ -137,6 +137,8 @@ CREATE TABLE bank_slip_status_event (
     to_status_id    INTEGER NOT NULL REFERENCES bank_slip_status(id),
     reason          VARCHAR(255),
     created_at      TIMESTAMP NOT NULL DEFAULT NOW()
+);
+
 CREATE TABLE corporate_status (
     id          SERIAL PRIMARY KEY,
     enumerator  VARCHAR(20) NOT NULL,
@@ -191,4 +193,45 @@ CREATE TABLE corporate_audit (
     actor_customer_id   INTEGER REFERENCES customer(id),
     action              VARCHAR(100) NOT NULL,
     created_at          TIMESTAMP NOT NULL DEFAULT NOW()
+);
+
+-- ============================================
+-- Empréstimos
+-- ============================================
+
+CREATE TABLE loan (
+    id                  SERIAL PRIMARY KEY,
+    loan_key            CHAR(36) NOT NULL,
+    account_id          INTEGER NOT NULL REFERENCES account(id),
+    requested_amount    BIGINT NOT NULL,
+    total_amount_due    BIGINT NOT NULL,
+    interest_rate       INTEGER NOT NULL,
+    status              VARCHAR(20) NOT NULL DEFAULT 'active',
+    created_at          TIMESTAMP NOT NULL DEFAULT NOW(),
+    UNIQUE(loan_key)
+);
+
+CREATE TABLE loan_installment (
+    id                  SERIAL PRIMARY KEY,
+    loan_id             INTEGER NOT NULL REFERENCES loan(id),
+    installment_number  INTEGER NOT NULL,
+    amount              BIGINT NOT NULL,
+    due_date            TIMESTAMP NOT NULL,
+    status              VARCHAR(20) NOT NULL DEFAULT 'pending',
+    created_at          TIMESTAMP NOT NULL DEFAULT NOW()
+);
+
+-- ============================================
+-- Notificações
+-- ============================================
+
+CREATE TABLE notification (
+    id           SERIAL PRIMARY KEY,
+    key          CHAR(36)      NOT NULL,
+    customer_key CHAR(36)      NOT NULL,
+    title        VARCHAR(100)  NOT NULL,
+    body         TEXT          NOT NULL,
+    is_read      BOOLEAN       NOT NULL DEFAULT FALSE,
+    created_at   TIMESTAMP     NOT NULL DEFAULT NOW(),
+    UNIQUE(key)
 );

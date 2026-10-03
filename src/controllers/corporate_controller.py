@@ -7,6 +7,7 @@ from errors.custom_errors import InvalidCNPJ, DuplicatedCNPJ, NotFoundCustomer, 
 from utils.document_number import is_valid_cnpj
 
 
+
 class CorporateController(BaseController):
     def __init__(self) -> None:
         super().__init__(__name__)
@@ -200,7 +201,7 @@ class CorporateController(BaseController):
         if not self._check_role(corp, auth_customer, ["owner", "finance"]):
             raise ForbiddenAction()
 
-        req = self.corporate_repository.get_transfer_request(request_id)
+        req = self.corporate_repository.get_transfer_request_for_update(request_id)
         if not req or req.corporate_id != corp.id:
             from errors.custom_errors import NotFoundTransferRequest
             raise NotFoundTransferRequest()
@@ -228,11 +229,12 @@ class CorporateController(BaseController):
         # So we MUST pass `req.origin_account.customer.customer_key` as the caller to bypass the standard decoupled check!
         # Wait, if we do this, it works seamlessly!
         actual_account_owner_key = req.origin_account.customer.customer_key
+
+        req.status = "approved"
+        self.session.flush()
         
         transaction_controller.process_transaction(transaction_payload, actual_account_owner_key)
         
-        # Update our tracking
-        req.status = "approved"
         self.corporate_repository.create_audit(
             corporate_id=corp.id,
             action="transfer_approved",

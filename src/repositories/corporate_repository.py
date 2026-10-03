@@ -102,3 +102,14 @@ class CorporateRepository:
             CorporateAccount.corporate_id == corporate_id,
             CorporateAccount.account_id == account_id
         ).count() > 0
+
+    def get_transfer_request_for_update(self, request_id: int):
+        """Busca TRAVANDO o pedido até o commit: duas aprovações simultâneas viram fila."""
+        from models import CorporateTransferRequest
+        return (
+            self.session.query(CorporateTransferRequest)
+            .filter(CorporateTransferRequest.id == request_id)
+            .with_for_update()
+            .populate_existing()
+            .first()
+        )

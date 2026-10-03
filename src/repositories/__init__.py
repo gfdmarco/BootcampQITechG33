@@ -6,3 +6,4 @@ from repositories.transaction_repository import TransactionRepository
 from repositories.fee_repository import FeeRepository
 from repositories.bank_slip_repository import BankSlipRepository
 from repositories.corporate_repository import CorporateRepository
+from repositories.notification_repository import NotificationRepository

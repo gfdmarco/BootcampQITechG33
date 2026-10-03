@@ -7,3 +7,5 @@ from resources.account import AccountResource
 from resources.transaction import TransactionResource
 from resources.bank_slip import BankSlipResource
 from resources.corporate import CorporateResource
+from resources.loan import LoanResource
+from resources.notification import NotificationResource

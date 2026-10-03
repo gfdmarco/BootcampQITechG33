@@ -10,7 +10,7 @@ from middlewares import (
     register_session_manager_middleware,
     register_jwt_middleware,
 )
-from resources import HealthCheckResource, SampleEntityResource, CustomerResource, AccountResource, TransactionResource, BankSlipResource, CorporateResource, LoanResource
+from resources import HealthCheckResource, SampleEntityResource, CustomerResource, AccountResource, TransactionResource, BankSlipResource, CorporateResource, LoanResource, NotificationResource
 from utils.logger import setup_logging
 
 
@@ -250,6 +250,12 @@ def create_app() -> FastAPI:
     )
 
     application.add_api_route(
+        "/webhook/bank_slips/{bank_slip_key}/paid",
+        bank_slip_resource.on_post_webhook_paid,
+        methods=["POST"],
+    )
+
+    application.add_api_route(
         "/bank_slips/{bank_slip_key}",
         bank_slip_resource.on_get_by_key,
         methods=["GET"]
@@ -264,6 +270,23 @@ def create_app() -> FastAPI:
         "/accounts/{account_key}/bank_slips",
         bank_slip_resource.on_get_list,
         methods=["GET"],
+    )
+
+    # ────────────────────────────────────────────────────────────────
+    # Rotas de Notificações
+    # ────────────────────────────────────────────────────────────────
+    notification_resource = NotificationResource()
+
+    application.add_api_route(
+        "/notifications",
+        notification_resource.on_get_list,
+        methods=["GET"],
+    )
+
+    application.add_api_route(
+        "/notifications/{key}/read",
+        notification_resource.on_patch_read,
+        methods=["PATCH"],
     )
     
     # ────────────────────────────────────────────────────────────────

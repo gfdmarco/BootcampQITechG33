@@ -2,6 +2,7 @@ from fastapi import Request
 from fastapi import status as http_status
 from fastapi.encoders import jsonable_encoder
 from fastapi.responses import JSONResponse
+from fastapi import Request, Response
 
 from controllers.corporate_controller import CorporateController
 from utils.schema_handler import SchemaHandler
@@ -52,10 +53,7 @@ class CorporateResource:
 
         controller.remove_member(corporate_key, target_customer_key, authenticated_customer_key)
 
-        return JSONResponse(
-            content={},
-            status_code=http_status.HTTP_204_NO_CONTENT,
-        )
+        return Response(status_code=http_status.HTTP_204_NO_CONTENT)
 
     def on_post_account(self, corporate_key: str, request: Request) -> JSONResponse:
         controller = CorporateController()

@@ -370,14 +370,15 @@ class ForbiddenAction(QIException):
 
 class BankSlipProviderUnavailable(QIException):
     """Servidor externo indisponível"""
-    
+
     code = "QIT003001"
 
     def __init__(self) -> None:
-        title = "Bank Slip Provider Unavaiable"
+        title = "Bank Slip Provider Unavailable"
         http_status = 503
         description = "The access to the external bank slip provider could not be done."
         translation = "O acesso para o serviço externo de boletos está indisponível."
+        super().__init__(title, self.code, http_status, description, translation)
         
         
 class InvalidCNPJ(QIException):
@@ -439,4 +440,74 @@ class NotACorporateAccount(QIException):
         http_status = 403
         description = "The provided account is not linked to this corporate entity."
         translation = "A conta fornecida não está vinculada a esta empresa."
+        super().__init__(title, self.code, http_status, description, translation)
+
+# ──────────────────────────────────────────────────────────────────────────────
+# QIT005xxx — Empréstimos
+# ──────────────────────────────────────────────────────────────────────────────
+
+class HighRiskProfile(QIException):
+    code = "QIT005001"
+
+    def __init__(self) -> None:
+        super().__init__(
+            title="Loan Denied",
+            code=self.code,
+            http_status=422,
+            description="The customer's risk profile is too high to be granted a loan.",
+            translation="O perfil de risco é muito alto."
+        )
+
+
+class InsufficientBalanceForInstallment(QIException):
+    code = "QIT005002"
+
+    def __init__(self) -> None:
+        super().__init__(
+            title="Insufficient Balance",
+            code=self.code,
+            http_status=422,
+            description="Account does not have enough balance to pay the installment.",
+            translation="Saldo insuficiente para pagar a parcela."
+        )
+
+
+class InstallmentNotFound(QIException):
+    code = "QIT005003"
+
+    def __init__(self) -> None:
+        super().__init__(
+            title="Installment Not Found",
+            code=self.code,
+            http_status=404,
+            description="The requested installment was not found for this account.",
+            translation="Parcela não encontrada."
+        )
+
+
+class InvalidLoanAmount(QIException):
+    code = "QIT005004"
+
+    def __init__(self) -> None:
+        super().__init__(
+            title="Invalid Loan Amount",
+            code=self.code,
+            http_status=422,
+            description="The requested loan amount must be greater than zero.",
+            translation="O valor do empréstimo deve ser maior que zero."
+        )
+
+
+# ──────────────────────────────────────────────────────────────────────────────
+# QIT009xxx — Motor de Risco
+# ──────────────────────────────────────────────────────────────────────────────
+
+class RiskEngineDenied(QIException):
+    code = "QIT009001"
+
+    def __init__(self, reason: str) ->  None:
+        title = "Risk Engine Denied"
+        http_status = 403
+        description = f"Transaction denied by Anti-Fraud Risk Engine: {reason}"
+        translation = f"Transação negada pelo Motor de Risco Antifraude: {reason}"
         super().__init__(title, self.code, http_status, description, translation)

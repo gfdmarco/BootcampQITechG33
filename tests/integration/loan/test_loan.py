@@ -1,5 +1,6 @@
 from tests.utils import PayloadGenerator, RequestGenerator
 from tests.utils.request_generator import ClientRequisition, INTERNAL_TOKEN
+from tests.utils.api_helpers import set_risk_score
 
 class TestLoanEndpoints:
     def _create_and_login_customer(self):
@@ -7,6 +8,7 @@ class TestLoanEndpoints:
         status, response = RequestGenerator.POST_customer(payload)
         assert status == 201
         customer_key = response["customer_key"]
+        set_risk_score(customer_key, "low")
 
         login_payload = {
             "document_number": payload["document_number"],
