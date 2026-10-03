@@ -39,9 +39,13 @@ services:
       # nesta lista NAO CHEGA no container: o compose repassa o que
       # esta escrito aqui, e mais nada. Sem estas tres linhas, mexer
       # nos BANKSLIP_* do .env nao teria efeito nenhum aqui dentro.
-      BANKSLIP_API_URL: ${BANKSLIP_API_URL:-http://localhost:8080}
+      BANKSLIP_API_URL: ${BANKSLIP_API_URL:-http://bankslip-mock:8080}
       BANKSLIP_API_INTERNAL_TOKEN: ${BANKSLIP_API_INTERNAL_TOKEN:-default_token}
       BANKSLIP_API_TIMEOUT: ${BANKSLIP_API_TIMEOUT:-5}
+      RISK_ENGINE_URL: ${RISK_ENGINE_URL:-http://risk_engine:3000}
+      RISK_INTERNAL_TOKEN: ${RISK_INTERNAL_TOKEN:-risk_default_token}
+      REDIS_URL: ${REDIS_URL:-redis://redis:6379/0}
+
     volumes:
       # Monta o codigo pra dentro do container: salvou o arquivo,
       # a API recarrega sozinha (o --reload ali embaixo).
@@ -61,6 +65,10 @@ services:
     depends_on:
       db:
         condition: service_healthy
+      bankslip-mock:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
 
   db:
     build: ./database/.
@@ -77,4 +85,99 @@ services:
       interval: 3s
       timeout: 3s
       retries: 20
+  
+  bankslip-mock:
+    build: ./mock
+    environment:
+      # A senha que o mock exige. Mesma variável que a API usa para enviar,
+      # então os dois lados sempre batem.
+      MOCK_INTERNAL_TOKEN: ${BANKSLIP_API_INTERNAL_TOKEN:-default_token}
+    ports:
+      - "${MOCK_PORT:-8080}:8080"
+    healthcheck:
+      test: ["CMD-SHELL", "python -c 'import urllib.request; urllib.request.urlopen(\"http://localhost:8080/health_check\")'"]
+      interval: 3s
+      timeout: 5s
+      retries: 20
 
+
+  risk_engine:
+    build:
+      context: ./risk_engine
+      target: api
+    ports:
+      - "${RISK_API_PORT:-8001}:3000"
+    environment:
+      APP_ENV: ${APP_ENV:-local}
+      SERVICE_NAME: ${SERVICE_NAME:-risk-engine}
+      # Dentro do compose, o banco de risco atende por "db_risk" — nao por localhost.
+      DATABASE_URL: postgresql+psycopg2://risk:risk@db_risk:5432/risk
+      INTERNAL_TOKEN: ${RISK_INTERNAL_TOKEN:-risk_default_token}
+      REDIS_URL: ${REDIS_URL:-redis://redis:6379/0}
+    volumes:
+      - ./risk_engine/src:/app
+    command: uvicorn app:app --host 0.0.0.0 --port 3000 --no-server-header --reload
+    healthcheck:
+      test: ["CMD-SHELL", "python -c 'import urllib.request; urllib.request.urlopen(\"http://localhost:3000/health_check\")'"]
+      interval: 3s
+      timeout: 5s
+      retries: 20
+      start_period: 5s
+    depends_on:
+      db_risk:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+
+  risk_worker:
+    # Worker assíncrono que roda o LLM Classifier a cada 6h.
+    # Compartilha a mesma imagem do risk_engine, mas sobe o scheduler.
+    build:
+      context: ./risk_engine
+      target: worker
+    environment:
+      DATABASE_URL: postgresql+psycopg2://risk:risk@db_risk:5432/risk
+      REDIS_URL: ${REDIS_URL:-redis://redis:6379/0}
+      GROQ_API_KEY: ${GROQ_API_KEY:-}
+      GROQ_MODEL: ${GROQ_MODEL:-llama-3.1-8b-instant}
+      CORE_API_URL: ${CORE_API_URL:-http://api:3000}
+      RISK_ENGINE_URL: ${RISK_ENGINE_URL:-http://risk_engine:3000}
+      INTERNAL_TOKEN: ${RISK_INTERNAL_TOKEN:-risk_default_token}
+      WORKER_INTERVAL_HOURS: ${WORKER_INTERVAL_HOURS:-6}
+    depends_on:
+      risk_engine:
+        condition: service_healthy
+      db_risk:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+
+  db_risk:
+    # Banco exclusivo do microsservico de risco — isolado do Core bancario.
+    # Espelha o padrao do servico "db" principal.
+    build: ./risk_engine/database/.
+    environment:
+      POSTGRES_USER: risk
+      POSTGRES_PASSWORD: risk
+      POSTGRES_DB: risk
+    ports:
+      # RISK_DB_PORT=5433 no .env se a 5432 estiver ocupada.
+      - "${RISK_DB_PORT:-5433}:5432"
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U risk -d risk"]
+      interval: 3s
+      timeout: 3s
+      retries: 20
+
+  redis:
+    # Cache distribuído compartilhado por toda a stack.
+    # Cada módulo usa um prefixo de namespace para evitar colisões de chave
+    # (risk:, rate:, blacklist:, fee:).
+    image: redis:7-alpine
+    ports:
+      - "${REDIS_PORT:-6379}:6379"
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 3s
+      timeout: 3s
+      retries: 20

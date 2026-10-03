@@ -131,3 +131,134 @@ Abaixo está o cronograma lógico de implementação para plugar essas expansõe
 *   **Entregável 4.2: Liquidação de Boleto (Assíncrono)**
     *   **Ação:** Criar rota `POST /boletos/pay` (Simulando o sistema externo bancário).
     *   **Integração:** Como proposto, usaremos processamento assíncrono. O pagamento cai em uma fila. Um worker a consome e faz o acréscimo (`credit`) no SGBD da conta recebedora na "virada do dia", gerando um registro `TRANSACTION` de `type = boleto_compensation`.
+
+
+---
+
+## 🤖 MÓDULO SATÉLITE 3.3: Classificação de Risco via LLM (Async Worker)
+
+### A Ideia
+Em vez de limitar a análise de risco a regras estáticas e determinísticas (ex: "Valor > R$ 50 mil = DENY"), podemos enriquecer o sistema com um **Worker Assíncrono** que usa uma LLM para analisar o padrão comportamental completo do cliente (histórico de transações dos últimos 30 dias) e atualizar seu score de risco de forma proativa e periódica.
+
+### Por que Assíncrono (e não Síncrono)?
+LLMs gratuitas como **Groq** (Llama 3 / Mixtral) têm latência de 500ms a 3s por inferência. Modelos como o Gemini Free Tier chegam a 5-15s. Isso inviabiliza o uso no caminho direto da transação (que tem timeout de 2s). A solução é separar os dois tempos:
+
+*   **Tempo Real (Síncrono):** O interceptor do `TransactionController` consulta o Risk Engine que apenas **lê** um `risk_score` pré-calculado. Resposta em < 50ms.
+*   **Análise Profunda (Assíncrono):** Um Worker roda a cada X horas, alimenta a LLM com o histórico do cliente e **escreve** o novo score no banco do Risk Engine.
+
+```mermaid
+sequenceDiagram
+    actor Cliente
+    participant Core as API Core
+    participant RiskEngine as Risk Engine
+    participant Worker as LLM Worker (Cron)
+    participant Groq as Groq API (Llama 3)
+
+    Note over Worker,Groq: Executa a cada 6 horas (assíncrono)
+    Worker->>Core: GET /accounts/{key}/statement (histórico 30d)
+    Core-->>Worker: Transações do cliente
+    Worker->>Groq: Prompt com histórico + pergunta de score
+    Groq-->>Worker: Classificação - LOW, MEDIUM, HIGH
+    Worker->>RiskEngine: PATCH /risk_profile/{customer_key}
+    RiskEngine-->>Worker: 200 OK - score atualizado
+
+    Note over Cliente,RiskEngine: Fluxo síncrono em tempo real
+    Cliente->>Core: POST /transactions (PIX de R$ 5.000)
+    Core->>RiskEngine: POST /evaluate - lê score do banco
+    RiskEngine-->>Core: APPROVE ou DENY (< 50ms)
+    Core-->>Cliente: 201 Created ou 403 Denied
+```
+
+### Tecnologia e Modelo Recomendados
+*   **Groq API (gratuita):** Usa os modelos `llama-3.1-8b-instant` ou `mixtral-8x7b`. Latência de ~400ms e generosa no plano free. API 100% compatível com o padrão OpenAI.
+*   **Prompt de Classificação:**
+    ```
+    Você é um analista de risco bancário. Com base no histórico de transações
+    abaixo, classifique o perfil do cliente como LOW, MEDIUM ou HIGH.
+    Responda APENAS com uma dessas três palavras.
+
+    Histórico: {transaction_summary}
+    ```
+
+
+---
+
+## ⚡ CAMADA TRANSVERSAL: Redis como Read Model e Cache Distribuído
+
+O Redis não é uma feature isolada — é uma **infraestrutura compartilhada** que melhora a performance e o desacoplamento de múltiplos módulos ao mesmo tempo. Uma única instância serve toda a stack.
+
+### Casos de uso mapeados para ESTE projeto
+
+#### 1. Score de Risco (Read Model — Risk Engine)
+O uso primário que motivou a adoção. O LLM Worker calcula o score do cliente e escreve no Redis. O Core lê diretamente do cache, eliminando o HTTP síncrono ao Risk Engine no caminho da transação.
+
+```mermaid
+flowchart LR
+    Worker["LLM Worker
+(a cada 6h)"] -->|"SET risk:{key} HIGH EX 21600"| Redis
+    Core["Core API
+TransactionController"] -->|"GET risk:{key} < 1ms"| Redis
+    Redis -->|"score: HIGH"| Core
+    Core -->|"DENY ou APPROVE"| Cliente
+```
+
+*   **Chave:** `risk:{customer_key}` (ex: `risk:a1b2c3d4-...`)
+*   **TTL:** 6 horas (expira junto com o próximo ciclo do Worker)
+*   **Fallback:** Se a chave expirou ou o Redis estiver fora, o Core consulta o Risk Engine via HTTP como hoje (degradação graciosa).
+
+#### 2. Rate Limiting / Anti-Abuso (Core Bancário)
+Controla quantas requisições um mesmo cliente pode fazer por janela de tempo, prevenindo abuso de endpoints críticos como `POST /auth/login` (brute-force de senha).
+
+*   **Chave:** `rate:{endpoint}:{customer_key}` com TTL de 60s
+*   **Valor:** contador atômico via `INCR` do Redis
+*   **Lógica:** Se `INCR` retornar > 5 para `rate:login:{ip}`, a API retorna `429 Too Many Requests` sem nem checar o banco.
+
+#### 3. Cache de Sessão / Blacklist de JWT (Auth)
+Permite invalidar tokens JWT instantaneamente (ex: após troca de senha ou logout). Como JWT é stateless por definição, sem um blacklist externo é impossível revogar um token antes de expirar.
+
+*   **Chave:** `blacklist:{jti}` (onde `jti` é o ID único do token)
+*   **TTL:** Igual ao tempo de expiração restante do token
+*   **Lógica:** O middleware JWT, após verificar a assinatura, checa se o `jti` existe no Redis. Se sim, rejeita com `401`.
+
+#### 4. Cache de Tarifas (Fee Policy)
+A tabela `FEE` raramente muda, mas é consultada em toda transferência. Um cache evita um `SELECT` ao banco para cada PIX feito.
+
+*   **Chave:** `fee:{channel}` (ex: `fee:pix`, `fee:ted`)
+*   **TTL:** 1 hora (tempo suficiente para refletir qualquer mudança tarifária)
+
+### Infraestrutura
+
+Um único container Redis compartilhado por toda a stack. Cada módulo usa um **prefixo de namespace** nas chaves para evitar colisões:
+
+| Módulo         | Prefixo         | Exemplo                          |
+| :------------- | :-------------- | :------------------------------- |
+| Risk Engine    | `risk:`         | `risk:a1b2c3d4`                  |
+| Rate Limiting  | `rate:`         | `rate:login:192.168.0.1`         |
+| JWT Blacklist  | `blacklist:`    | `blacklist:jti-uuid-do-token`    |
+| Fee Cache      | `fee:`          | `fee:pix`                        |
+
+---
+
+## 📋 STATUS DE IMPLEMENTAÇÃO DO RISK ENGINE
+
+### O que já foi entregue (`feat/risk-api-module`)
+
+*   **[DONE]** Estrutura do microsserviço (`risk_engine/`) criada no monorepo.
+*   **[DONE]** Dockerfile e requirements espelhando os padrões do Core.
+*   **[DONE]** Serviço `risk_engine` plugado no `docker-compose.yml` com healthcheck.
+*   **[DONE]** Variável `RISK_ENGINE_URL` injetada no ambiente do Core via `docker-compose.yml`.
+*   **[DONE]** Rota `POST /evaluate` com regra inicial (Amount > R$ 50k = DENY).
+*   **[DONE]** Rota `GET /health_check` do microsserviço.
+*   **[DONE]** `RiskEngineConnector` criado em `src/connectors/` seguindo o padrão arquitetural do Core.
+*   **[DONE]** `RiskEngineDenied` (erro `QIT009001`) registrado em `src/errors/custom_errors.py`.
+*   **[DONE]** `TransactionController` integrado ao conector (intercepta toda transação antes do débito).
+
+### Próximos Passos (Backlog Priorizado)
+
+*   **[TODO - Alta Prioridade]** Modelar e criar a tabela `RISK_PROFILE` no banco de dados do Risk Engine (campos: `customer_key`, `risk_score`, `reason`, `last_evaluated_at`).
+*   **[TODO - Alta Prioridade]** Refatorar o `POST /evaluate` para consultar o `risk_score` da tabela `RISK_PROFILE` em vez de usar a regra hardcoded de valor.
+*   **[TODO - Alta Prioridade]** Criar a rota interna `PATCH /risk_profile/{customer_key}` para o Worker LLM atualizar o score.
+*   **[TODO - Média Prioridade]** Construir o LLM Worker (`risk_engine/worker/llm_classifier.py`) usando a biblioteca `groq` para consumir a API gratuita.
+*   **[TODO - Média Prioridade]** Configurar o Cron Job do Worker (via `APScheduler` ou `cron` no Docker) para rodar a classificação a cada 6 horas.
+*   **[TODO - Baixa Prioridade]** Criar rota `GET /risk_profile/{customer_key}` para auditoria interna (visualizar o score atual de um cliente).
+*   **[TODO - Baixa Prioridade]** Escrever testes de integração para o conector (`test_risk_engine_connector.py`) cobrindo os cenários de APPROVE, DENY e Fail-Open.

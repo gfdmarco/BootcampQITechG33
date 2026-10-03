@@ -1,5 +1,6 @@
 from controllers.base_controller import BaseController
 from dtos import TransactionDTO
+from connectors.risk_engine_connector import RiskEngineConnector
 from errors import (
     ForbiddenAction,
     InsufficientBalance,
@@ -36,6 +37,7 @@ class TransactionController(BaseController):
         self.fee_repository = FeeRepository(self.context)
         self.account_repository = AccountRepository(self.context)
         self.customer_repository = CustomerRepository(self.context)
+        self.risk_connector = RiskEngineConnector()
 
     def process_transaction(self, payload: dict, authenticated_customer_key: str) -> dict:
         """
@@ -125,6 +127,19 @@ class TransactionController(BaseController):
                 if not self.account_repository.debit(origin_account.id, total_debit):
                     raise InsufficientBalance()
 
+        # Validação via Connector Externo (Anti-Fraud Sidecar)
+        # Só para transferências (débitos): depósitos são créditos, não
+        # consomem limite diário e não precisam de avaliação de risco.
+        # É chamado após todas as validações de saldo/conta passarem para
+        # evitar "Ghost Spend" (limite consumido por transação que falhou).
+        # Se negar, levanta RiskEngineDenied (403) e o SQLAlchemy faz rollback.
+        if payload.get("type") == "transfer":
+            self.risk_connector.evaluate_transaction(
+                customer_key=authenticated_customer_key,
+                amount=payload.get("amount", 0),
+                transaction_type=payload.get("channel")
+            )
+
         transaction_data = {
             "origin_account": origin_account,
             "destination_account": destination_account,
@@ -149,7 +164,31 @@ class TransactionController(BaseController):
         # Passa pelo DTO antes do commit final.
         transaction_dto = TransactionDTO.only_obj_key(transaction)
 
+        # Captura valores simples ANTES do commit (objetos expiram depois).
+        _sender_key = authenticated_customer_key
+        _receiver_key = destination_account.customer.customer_key.strip()
+        _amount = payload["amount"]
+        _channel = payload["channel"]
+
         self.session.commit()
+
+        # Notificacao fire-and-forget: nunca quebra a transferencia.
+        try:
+            from controllers.notification_controller import NotificationController
+
+            notifier = NotificationController()
+            if transaction_type == "transfer":
+                notifier.notify_transfer(_sender_key, _receiver_key, _amount, _channel)
+            else:
+                notifier.notify_deposit(_receiver_key, _amount, _channel)
+            notifier.session.commit()
+        except Exception:
+            self.logger.exception("Falha ao criar notificacao de transacao")
+            try:
+                self.session.rollback()
+            except Exception:
+                pass
+
         return transaction_dto
 
     def get_by_key(self, transaction_key: str, authenticated_customer_key: str) -> dict:

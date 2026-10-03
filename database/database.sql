@@ -88,7 +88,7 @@ CREATE TABLE transaction (
     fee_amount              BIGINT NOT NULL DEFAULT 0,              -- money charged (cents), not the percentage
     fee_id                  INTEGER REFERENCES fee(id),
     type                    VARCHAR(20) NOT NULL,   -- deposit / transfer
-    channel                 VARCHAR(50) NOT NULL,   -- pix / ted / card / international
+    channel                 VARCHAR(50) NOT NULL,   -- pix / ted / card / international / bank_slip
     status_id               INTEGER NOT NULL REFERENCES transaction_status(id),
     created_at              TIMESTAMP NOT NULL DEFAULT NOW(),
     updated_at              TIMESTAMP NOT NULL DEFAULT NOW(),
@@ -103,4 +103,135 @@ CREATE TABLE transaction_status_event (
     to_status_id    INTEGER NOT NULL REFERENCES transaction_status(id),
     reason          VARCHAR(255),
     created_at      TIMESTAMP NOT NULL DEFAULT NOW()
+);
+
+CREATE TABLE bank_slip_status (
+    id          SERIAL PRIMARY KEY,
+    enumerator  VARCHAR(50) NOT NULL,
+    created_at  TIMESTAMP NOT NULL DEFAULT NOW(),
+    UNIQUE(enumerator)
+);
+
+CREATE TABLE bank_slip (
+    id              SERIAL PRIMARY KEY,
+    bank_slip_key   CHAR(36) NOT NULL, 
+    amount          BIGINT NOT NULL, 
+    expiration_date DATE NOT NULL,
+    external_key    CHAR(36),
+    barcode         CHAR(47),
+    account_id      INTEGER NOT NULL REFERENCES account(id),
+    transaction_id  INTEGER REFERENCES transaction(id),
+    status_id       INTEGER NOT NULL REFERENCES bank_slip_status(id),
+    created_at  TIMESTAMP NOT NULL DEFAULT NOW(),
+    updated_at  TIMESTAMP NOT NULL DEFAULT NOW(),
+    UNIQUE(bank_slip_key), UNIQUE (external_key), UNIQUE (transaction_id),
+    check (amount > 0)
+);
+
+INSERT INTO bank_slip_status (enumerator) VALUES ('pending'), ('issued'), ('paid'), ('failed'), ('expired');
+
+CREATE TABLE bank_slip_status_event (
+    id              SERIAL PRIMARY KEY,
+    bank_slip_id  INTEGER NOT NULL REFERENCES bank_slip(id),
+    from_status_id  INTEGER REFERENCES bank_slip_status(id),
+    to_status_id    INTEGER NOT NULL REFERENCES bank_slip_status(id),
+    reason          VARCHAR(255),
+    created_at      TIMESTAMP NOT NULL DEFAULT NOW()
+);
+
+CREATE TABLE corporate_status (
+    id          SERIAL PRIMARY KEY,
+    enumerator  VARCHAR(20) NOT NULL,
+    created_at  TIMESTAMP NOT NULL DEFAULT NOW(),
+    UNIQUE(enumerator)
+);
+INSERT INTO corporate_status (enumerator) VALUES ('created'), ('pending'), ('active'), ('blocked');
+
+CREATE TABLE corporate_customer (
+    id            SERIAL PRIMARY KEY,
+    corporate_key CHAR(36) NOT NULL,
+    cnpj          CHAR(14) NOT NULL,
+    company_name  VARCHAR(255) NOT NULL,
+    trade_name    VARCHAR(255),
+    status_id     INTEGER NOT NULL REFERENCES corporate_status(id),
+    created_at    TIMESTAMP NOT NULL DEFAULT NOW(),
+    updated_at    TIMESTAMP NOT NULL DEFAULT NOW(),
+    UNIQUE(corporate_key), UNIQUE(cnpj)
+);
+
+CREATE TABLE corporate_member (
+    id            SERIAL PRIMARY KEY,
+    corporate_id  INTEGER NOT NULL REFERENCES corporate_customer(id),
+    customer_id   INTEGER NOT NULL REFERENCES customer(id),
+    role          VARCHAR(20) NOT NULL,
+    created_at    TIMESTAMP NOT NULL DEFAULT NOW(),
+    UNIQUE(corporate_id, customer_id)
+);
+
+CREATE TABLE corporate_account (
+    id            SERIAL PRIMARY KEY,
+    corporate_id  INTEGER NOT NULL REFERENCES corporate_customer(id),
+    account_id    INTEGER NOT NULL REFERENCES account(id),
+    created_at    TIMESTAMP NOT NULL DEFAULT NOW(),
+    UNIQUE(corporate_id, account_id)
+);
+
+CREATE TABLE corporate_transfer_request (
+    id                      SERIAL PRIMARY KEY,
+    corporate_id            INTEGER NOT NULL REFERENCES corporate_customer(id),
+    requester_customer_id   INTEGER NOT NULL REFERENCES customer(id),
+    origin_account_id       INTEGER NOT NULL REFERENCES account(id),
+    destination_account_key CHAR(36) NOT NULL,
+    amount                  BIGINT NOT NULL,
+    status                  VARCHAR(20) NOT NULL DEFAULT 'pending',
+    created_at              TIMESTAMP NOT NULL DEFAULT NOW()
+);
+
+CREATE TABLE corporate_audit (
+    id                  SERIAL PRIMARY KEY,
+    corporate_id        INTEGER NOT NULL REFERENCES corporate_customer(id),
+    actor_customer_id   INTEGER REFERENCES customer(id),
+    action              VARCHAR(100) NOT NULL,
+    created_at          TIMESTAMP NOT NULL DEFAULT NOW()
+);
+
+-- ============================================
+-- Empréstimos
+-- ============================================
+
+CREATE TABLE loan (
+    id                  SERIAL PRIMARY KEY,
+    loan_key            CHAR(36) NOT NULL,
+    account_id          INTEGER NOT NULL REFERENCES account(id),
+    requested_amount    BIGINT NOT NULL,
+    total_amount_due    BIGINT NOT NULL,
+    interest_rate       INTEGER NOT NULL,
+    status              VARCHAR(20) NOT NULL DEFAULT 'active',
+    created_at          TIMESTAMP NOT NULL DEFAULT NOW(),
+    UNIQUE(loan_key)
+);
+
+CREATE TABLE loan_installment (
+    id                  SERIAL PRIMARY KEY,
+    loan_id             INTEGER NOT NULL REFERENCES loan(id),
+    installment_number  INTEGER NOT NULL,
+    amount              BIGINT NOT NULL,
+    due_date            TIMESTAMP NOT NULL,
+    status              VARCHAR(20) NOT NULL DEFAULT 'pending',
+    created_at          TIMESTAMP NOT NULL DEFAULT NOW()
+);
+
+-- ============================================
+-- Notificações
+-- ============================================
+
+CREATE TABLE notification (
+    id           SERIAL PRIMARY KEY,
+    key          CHAR(36)      NOT NULL,
+    customer_key CHAR(36)      NOT NULL,
+    title        VARCHAR(100)  NOT NULL,
+    body         TEXT          NOT NULL,
+    is_read      BOOLEAN       NOT NULL DEFAULT FALSE,
+    created_at   TIMESTAMP     NOT NULL DEFAULT NOW(),
+    UNIQUE(key)
 );

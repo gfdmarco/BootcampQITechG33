@@ -10,7 +10,7 @@ from middlewares import (
     register_session_manager_middleware,
     register_jwt_middleware,
 )
-from resources import HealthCheckResource, SampleEntityResource, CustomerResource, AccountResource, TransactionResource
+from resources import HealthCheckResource, SampleEntityResource, CustomerResource, AccountResource, TransactionResource, BankSlipResource, CorporateResource, LoanResource, NotificationResource
 from utils.logger import setup_logging
 
 
@@ -237,8 +237,80 @@ def create_app() -> FastAPI:
         transaction_resource.on_get_list,
         methods=["GET"],
     )
+    
+    # ────────────────────────────────────────────────────────────────
+    # Rotas de emissao de boletos de deposito
+    # ────────────────────────────────────────────────────────────────
+    
+    bank_slip_resource = BankSlipResource()
+    application.add_api_route(
+        "/accounts/{account_key}/bank_slips",
+        bank_slip_resource.on_post,
+        methods=["POST"],
+    )
 
+    application.add_api_route(
+        "/webhook/bank_slips/{bank_slip_key}/paid",
+        bank_slip_resource.on_post_webhook_paid,
+        methods=["POST"],
+    )
 
+    application.add_api_route(
+        "/bank_slips/{bank_slip_key}",
+        bank_slip_resource.on_get_by_key,
+        methods=["GET"]
+    )
+
+    application.add_api_route(
+        "/webhook/bank_slips/{bank_slip_key}/paid",
+        bank_slip_resource.on_post_webhook_paid,
+    )
+    
+    application.add_api_route(
+        "/accounts/{account_key}/bank_slips",
+        bank_slip_resource.on_get_list,
+        methods=["GET"],
+    )
+
+    # ────────────────────────────────────────────────────────────────
+    # Rotas de Notificações
+    # ────────────────────────────────────────────────────────────────
+    notification_resource = NotificationResource()
+
+    application.add_api_route(
+        "/notifications",
+        notification_resource.on_get_list,
+        methods=["GET"],
+    )
+
+    application.add_api_route(
+        "/notifications/{key}/read",
+        notification_resource.on_patch_read,
+        methods=["PATCH"],
+    )
+    
+    # ────────────────────────────────────────────────────────────────
+    # Rotas de Empréstimos
+    # ────────────────────────────────────────────────────────────────
+    loan_resource = LoanResource()
+
+    application.add_api_route(
+        "/loans/simulate",
+        loan_resource.on_post_simulate,
+        methods=["POST"],
+    )
+
+    application.add_api_route(
+        "/loans",
+        loan_resource.on_post,
+        methods=["POST"],
+    )
+    
+    application.add_api_route(
+        "/loans/{loan_key}/installments/{installment_id}/pay",
+        loan_resource.on_post_pay_installment,
+        methods=["POST"],
+    )
 
     application.add_api_route(
         "/sample_entity",
@@ -264,6 +336,48 @@ def create_app() -> FastAPI:
         "/sample_entities",
         sample_entity_resource.on_get_list,
         methods=["GET"],
+    )
+
+    # ────────────────────────────────────────────────────────────────
+    # Rotas de Pessoa Jurídica (Corporate)
+    # ────────────────────────────────────────────────────────────────
+    corporate_resource = CorporateResource()
+    
+    application.add_api_route(
+        "/corporates",
+        corporate_resource.on_post,
+        methods=["POST"],
+    )
+    application.add_api_route(
+        "/corporates/{corporate_key}",
+        corporate_resource.on_get_by_key,
+        methods=["GET"],
+    )
+    application.add_api_route(
+        "/corporates/{corporate_key}/members",
+        corporate_resource.on_post_member,
+        methods=["POST"],
+    )
+    application.add_api_route(
+        "/corporates/{corporate_key}/members/{target_customer_key}",
+        corporate_resource.on_delete_member,
+        methods=["DELETE"],
+    )
+    application.add_api_route(
+        "/corporates/{corporate_key}/accounts",
+        corporate_resource.on_post_account,
+        methods=["POST"],
+    )
+
+    application.add_api_route(
+        "/corporates/{corporate_key}/transfers",
+        corporate_resource.on_post_transfer,
+        methods=["POST"],
+    )
+    application.add_api_route(
+        "/corporates/{corporate_key}/transfers/{request_id}/approve",
+        corporate_resource.on_post_approve_transfer,
+        methods=["POST"],
     )
 
     register_error_handlers(application)

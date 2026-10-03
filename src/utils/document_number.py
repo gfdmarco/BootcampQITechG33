@@ -62,3 +62,33 @@ def is_valid_cpf(document_number: str) -> bool:
             return False
 
     return True
+
+CNPJ_LENGTH = 14
+
+def is_valid_cnpj(document_number: str) -> bool:
+    """Valida um CNPJ através dos seus dígitos verificadores."""
+    digits = [int(c) for c in document_number if c.isdigit()]
+    
+    if len(digits) != CNPJ_LENGTH:
+        return False
+        
+    if len(set(digits)) == 1:
+        return False
+        
+    # Primeiro dígito
+    weights_1 = [5, 4, 3, 2, 9, 8, 7, 6, 5, 4, 3, 2]
+    total_1 = sum(d * w for d, w in zip(digits[:12], weights_1))
+    remainder_1 = total_1 % 11
+    expected_digit_1 = 0 if remainder_1 < 2 else 11 - remainder_1
+    if digits[12] != expected_digit_1:
+        return False
+        
+    # Segundo dígito
+    weights_2 = [6, 5, 4, 3, 2, 9, 8, 7, 6, 5, 4, 3, 2]
+    total_2 = sum(d * w for d, w in zip(digits[:13], weights_2))
+    remainder_2 = total_2 % 11
+    expected_digit_2 = 0 if remainder_2 < 2 else 11 - remainder_2
+    if digits[13] != expected_digit_2:
+        return False
+        
+    return True
