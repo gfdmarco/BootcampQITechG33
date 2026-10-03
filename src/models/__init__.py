@@ -26,3 +26,7 @@ from models.corporate_member import CorporateMember
 from models.corporate_account import CorporateAccount
 from models.corporate_transfer_request import CorporateTransferRequest
 from models.corporate_audit import CorporateAudit
+
+from models.loan import Loan
+from models.loan_installment import LoanInstallment
+from models.notification import Notification

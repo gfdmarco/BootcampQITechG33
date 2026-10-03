@@ -2,6 +2,7 @@ from fastapi import Request
 from fastapi import status as http_status
 from fastapi.encoders import jsonable_encoder
 from fastapi.responses import JSONResponse
+from fastapi import Request, Response
 
 from controllers.loan_controller import LoanController
 from utils.schema_handler import SchemaHandler
@@ -48,8 +49,5 @@ class LoanResource:
         authenticated_customer_key = request.state.customer_key
 
         controller.pay_installment(loan_key, installment_id, authenticated_customer_key)
-
-        return JSONResponse(
-            content=None,
-            status_code=http_status.HTTP_204_NO_CONTENT,
-        )
+        
+        return Response(status_code=http_status.HTTP_204_NO_CONTENT)

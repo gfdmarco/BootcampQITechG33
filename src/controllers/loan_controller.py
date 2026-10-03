@@ -4,10 +4,12 @@ from datetime import datetime, timedelta
 from controllers.base_controller import BaseController
 from models.loan import Loan
 from models.loan_installment import LoanInstallment
-from repositories import AccountRepository
+from models import AccountStatus, TransactionStatus
+from repositories import AccountRepository, TransactionRepository
 from connectors.risk_engine_connector import RiskEngineConnector
 from errors.custom_errors import HighRiskProfile, InsufficientBalanceForInstallment, InstallmentNotFound, NotFoundAccount, InvalidLoanAmount
 from errors import ForbiddenAction
+
 
 
 class LoanController(BaseController):
@@ -19,6 +21,7 @@ class LoanController(BaseController):
     def __init__(self) -> None:
         super().__init__(__name__)
         self.account_repository = AccountRepository(self.context)
+        self.transaction_repository = TransactionRepository(self.context)
         self.risk_connector = RiskEngineConnector()
 
     def simulate_loan(self, account_key: str, requested_amount: int, installments_count: int, authenticated_customer_key: str) -> dict:
@@ -34,6 +37,9 @@ class LoanController(BaseController):
             raise NotFoundAccount(account_key)
             
         if account.customer.customer_key != authenticated_customer_key:
+            raise ForbiddenAction()
+
+        if account.status.enumerator != AccountStatus.ACTIVE:
             raise ForbiddenAction()
             
         # 2. Risk check
@@ -100,6 +106,16 @@ class LoanController(BaseController):
             
         # Disburse the money using the strictly decoupled existing mechanic
         self.account_repository.credit(account.id, requested_amount)
+
+        transaction = self.transaction_repository.create_transaction({
+            "origin_account": None,
+            "destination_account": account,
+            "amount": requested_amount,
+            "fee_amount": 0,
+            "type": "deposit",
+            "channel": "loan",
+        })
+        self.transaction_repository.update_status(transaction, TransactionStatus.CONFIRMED, reason="Loan disbursed")
         
         self.session.add(loan)
         self.session.commit()
@@ -129,7 +145,7 @@ class LoanController(BaseController):
             Loan.loan_key == loan_key,
             LoanInstallment.id == installment_id,
             LoanInstallment.status == "pending"
-        ).first()
+        ).with_for_update().populate_existing().first()
         
         if not installment:
             raise InstallmentNotFound()
