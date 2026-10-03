@@ -87,7 +87,7 @@ services:
       retries: 20
   
   bankslip-mock:
-    build: ./mock
+    build: ./mock_bankslip
     environment:
       # A senha que o mock exige. Mesma variável que a API usa para enviar,
       # então os dois lados sempre batem.
