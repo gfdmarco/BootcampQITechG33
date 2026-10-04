@@ -599,8 +599,4 @@ flowchart TD
 
 Os tres modulos estao no caminho certo, mas em maturidades diferentes.
 
-Customer ficou mais proximo do padrao ideal: tem estado atual, historico de status, validacoes de dominio, delete logico e idempotencia persistida na criacao. Notification continua simples e funcional, agora com outbox persistida e deduplicacao por `event_key`; antes de virar assincrono, ainda precisa de worker/reconciliacao. Risk agora tem uma separacao mais madura: cache de perfil em Redis continua reconstruivel, enquanto historico de score, requisicoes idempotentes e consumo de limite passaram a ter tabela persistente.
-
-Em frase curta para levar ao tech lead:
-
-> Redis pode acelerar risco e notificacao, mas nao pode ser a unica memoria do que precisa ser processado. A fonte de verdade precisa estar em tabela, com status, chave idempotente e reconciliacao.
+Customer ficou mais proximo do padrao ideal: tem estado atual, historico de status, validacoes de dominio, delete logico e idempotencia persistida na criacao. Notification esta simples e funcional, mas antes de virar assincrono precisa de outbox. Risk agora tem uma separacao mais madura: cache de perfil em Redis continua reconstruivel, enquanto historico de score, requisicoes idempotentes e consumo de limite passaram a ter tabela persistente.
