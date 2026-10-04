@@ -102,7 +102,7 @@ class CustomerController(BaseController):
 
         self.session.commit()
 
-        self._log_return("Cliente registrado", customer_dto, senha="criada")
+        self._log_return("Cliente registrado", customer_dto, password="created")
         return customer_dto
 
     def _is_same_registration(self, existing, customer_data: dict) -> bool:
@@ -260,7 +260,7 @@ class CustomerController(BaseController):
         customer.password_hash = bcrypt.hash(secrets.token_hex(16))
 
         self.session.commit()
-        self._log_return("Cliente encerrado", None, senha="invalidada")
+        self._log_return("Cliente encerrado", None, password="invalidated")
 
     def _parse_birthdate(self, raw_birthdate: str) -> date:
         """Converte a data, ou recusa com 422 em vez de 500.

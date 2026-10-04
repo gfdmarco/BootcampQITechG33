@@ -427,6 +427,6 @@ docker compose logs -f risk_worker  # classificação do score pela LLM
 docker compose down -v && docker compose up -d --build   # recria os bancos (necessário quando o .sql muda)
 ```
 
-O log de retorno nunca leva dado sensível: CPF e CNPJ saem com asteriscos (`123.***.***-**`), e-mail sai como `a***@ex.com`, senha aparece só como resultado (`senha=criada`, `senha=conferida`), tokens aparecem como `<emitido>` e o saldo como `<oculto>`.
+O log de retorno nunca leva dado sensível: CPF e CNPJ saem com asteriscos (`123.***.***-**`), e-mail sai como `a***@ex.com`, senha aparece só como resultado (`password=created`, `password=verified`), tokens aparecem como `<emitido>` e o saldo como `<oculto>`.
 
 </div>
