@@ -32,6 +32,12 @@ class TestCustomerDelete:
         assert response_get["status"] == "failed"
         assert response_get["name"] == "DELETED_USER"
         assert "deleted_" in response_get["email"]
+        failed_events = [
+            event
+            for event in response_get["status_events"]
+            if event["status"] == "failed"
+        ]
+        assert len(failed_events) == 1
 
         # O CPF deve continuar lá (por questões de compliance)
         assert response_get["document_number"] == original_payload["document_number"]

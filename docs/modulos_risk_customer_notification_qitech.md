@@ -49,7 +49,7 @@ flowchart TD
 
 | Modulo | Fonte de verdade hoje | Tem tabela de estado? | Usa Redis? | Risco principal |
 |---|---|---|---|---|
-| Customer | PostgreSQL Core | Sim, `customer_status` e `customer_status_event` | Nao | Duplicidade de evento no delete e falta de idempotency key no create |
+| Customer | PostgreSQL Core | Sim, `customer_status`, `customer_status_event` e `customer_idempotency_request` | Nao | Reconciliacao/expurgo futuro das chaves de idempotencia antigas |
 | Notification | PostgreSQL Core | Parcial: tabela final `notification`, sem outbox/event state | Nao no fluxo atual | Se virar async via Redis sem outbox, perde evento em falha |
 | Risk Management | PostgreSQL Risk | Sim: `risk_profile`, `risk_evaluation_event`, `risk_evaluation_request` e `risk_limit_consumption` | Sim, como cache/read model | Reconciliacao futura de reservas que nunca forem confirmadas |
 
@@ -107,38 +107,34 @@ As operacoes sensiveis com `customer_key` conferem se a chave da URL bate com a 
 
 ### Pontos de atencao
 
-**P1 - Delete grava status `failed` duas vezes**
+**Resolvido - Delete nao duplica evento `failed`**
 
-No `CustomerController.delete`, o status `failed` e atualizado duas vezes com razoes quase iguais. Isso cria dois eventos de status para a mesma transicao.
+O `CustomerController.delete` tinha duas chamadas para `update_status(customer, CustomerStatus.FAILED, ...)` com razoes quase iguais. Isso criava dois eventos de status para uma unica transicao.
 
-Impacto:
-
-- nao quebra o fluxo;
-- mas polui auditoria;
-- pode confundir uma analise posterior de "quantas transicoes ocorreram".
-
-Recomendacao:
+Decisao implementada:
 
 - manter apenas uma chamada para `update_status(customer, CustomerStatus.FAILED, reason=...)`;
-- adicionar teste que valide a quantidade de eventos no delete.
+- cobrir o delete com teste garantindo que so existe um evento `failed`;
+- preservar o restante do comportamento: bloqueio por saldo, fechamento de contas sem saldo, anonimizacao e invalidacao da senha.
 
-**P1 - Criacao de customer nao tem idempotency key**
+**Resolvido - Criacao de customer com idempotency key**
 
-Hoje, repetir `POST /customers` com mesmo CPF/email retorna duplicidade. Isso e aceitavel para bootcamp, mas nao e idempotencia completa.
+O `POST /customers` agora aceita o header `Idempotency-Key`. Quando a mesma chave e o mesmo payload sao reenviados, a API devolve a mesma resposta original. Quando a mesma chave e reutilizada com payload diferente, a API responde conflito.
 
-Cenario real:
+Isso fecha o cenario real de timeout:
 
 1. Cliente chama `POST /customers`.
 2. API cria o cliente e comita.
 3. A resposta se perde por timeout de rede.
 4. Cliente tenta de novo.
-5. API responde "duplicado", mas o cliente nao sabe se a primeira chamada criou o recurso ou se bateu em dado ja existente.
+5. API encontra a chave em `customer_idempotency_request` e reenvia o `customer_key` original.
 
-Recomendacao:
+Decisao implementada:
 
-- aceitar header `Idempotency-Key` em criacoes criticas;
-- persistir uma tabela `idempotency_request`;
-- responder a mesma resposta anterior quando a mesma chave for repetida com o mesmo payload.
+- a fonte de verdade da idempotencia fica no PostgreSQL, nao em memoria;
+- o payload e normalizado e hasheado com SHA-256;
+- a resposta 201 fica persistida junto da chave;
+- reuso da chave com payload diferente retorna `QIT001027`.
 
 ```mermaid
 sequenceDiagram
@@ -574,10 +570,10 @@ flowchart TD
 | P0 | Risk | Persistir consumo de limite diario em tabela | Redis nao pode ser a unica fonte do limite |
 | P1 | Risk | Reconciliar reservas antigas de `risk_limit_consumption` | Evita limite preso quando confirmacao pos-commit falhar |
 | P1 | Notification | Criar `notification_outbox` antes de usar Redis/fila | Evita perda de evento apos commit financeiro |
-| P1 | Customer | Remover status `failed` duplicado no delete | Limpa auditoria e evita trilha confusa |
+| Feito | Customer | Remover status `failed` duplicado no delete | Limpa auditoria e evita trilha confusa |
 | P1 | Core/Risk | Configurar timeout e degraded limit por env | Deixa regra operacional explicita |
 | P2 | Worker | Registrar tentativas de LLM com status | Permite retry, auditoria e investigacao |
-| P2 | Customer | Idempotency-Key em `POST /customers` | Retry seguro quando resposta se perde |
+| Feito | Customer | Idempotency-Key em `POST /customers` | Retry seguro quando resposta se perde |
 
 ---
 
@@ -585,7 +581,7 @@ flowchart TD
 
 Os tres modulos estao no caminho certo, mas em maturidades diferentes.
 
-Customer e o mais proximo do padrao ideal: tem estado atual, historico de status, validacoes de dominio e delete logico. Notification esta simples e funcional, mas antes de virar assincrono precisa de outbox. Risk agora tem uma separacao mais madura: cache de perfil em Redis continua reconstruivel, enquanto historico de score, requisicoes idempotentes e consumo de limite passaram a ter tabela persistente.
+Customer ficou mais proximo do padrao ideal: tem estado atual, historico de status, validacoes de dominio, delete logico e idempotencia persistida na criacao. Notification esta simples e funcional, mas antes de virar assincrono precisa de outbox. Risk agora tem uma separacao mais madura: cache de perfil em Redis continua reconstruivel, enquanto historico de score, requisicoes idempotentes e consumo de limite passaram a ter tabela persistente.
 
 Em frase curta para levar ao tech lead:
 

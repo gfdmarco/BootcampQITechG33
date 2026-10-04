@@ -1,6 +1,7 @@
 from models.customer_status import CustomerStatus
 from models.customer import Customer
 from models.customer_status_event import CustomerStatusEvent
+from models.customer_idempotency_request import CustomerIdempotencyRequest
 
 from models.account_status import AccountStatus
 from models.account import Account

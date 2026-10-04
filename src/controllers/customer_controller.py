@@ -1,4 +1,6 @@
 from datetime import date
+import hashlib
+import json
 from passlib.hash import bcrypt
 import secrets
 
@@ -12,6 +14,7 @@ from errors import (
     UnderageCustomer,
     NotFoundCustomer,
     ForbiddenAction,
+    InvalidIdempotencyKey,
     AccountNumberGenerationFailed,
     AccountInvalidStatusTransition,
     CustomerHasBalance
@@ -34,8 +37,16 @@ class CustomerController(BaseController):
         self.customer_repository = CustomerRepository(self.context)
         self.account_repository = AccountRepository(self.context)
 
-    def create(self, customer_data: dict) -> dict:
+    def create(self, customer_data: dict, idempotency_key: str = None) -> dict:
         self.logger.debug("Criando um novo Customer")
+        request_hash = self._payload_hash(customer_data)
+
+        if idempotency_key:
+            previous = self.customer_repository.get_idempotency_request(idempotency_key)
+            if previous is not None:
+                if previous.request_hash != request_hash:
+                    raise InvalidIdempotencyKey()
+                return previous.response_body
 
         document_number = customer_data["document_number"]
         email = customer_data["email"]
@@ -70,6 +81,16 @@ class CustomerController(BaseController):
 
         self.session.flush()
         customer_dto = CustomerDTO.obj_to_dict(customer)
+
+        if idempotency_key:
+            self.customer_repository.create_idempotency_request(
+                idempotency_key=idempotency_key,
+                customer_id=customer.id,
+                request_hash=request_hash,
+                response_status=201,
+                response_body=customer_dto,
+            )
+
         self.session.commit()
 
         return customer_dto
@@ -193,8 +214,6 @@ class CustomerController(BaseController):
             if account.status.enumerator != AccountStatus.CLOSED:
                 self.account_repository.update_status(account, AccountStatus.CLOSED)
 
-        self.customer_repository.update_status(customer, CustomerStatus.FAILED, reason="Customer requested account closure")   
-
         # Deleção lógica e auditoria
         self.customer_repository.update_status(
             customer, 
@@ -234,3 +253,7 @@ class CustomerController(BaseController):
             age = age - 1
 
         return age
+
+    def _payload_hash(self, payload: dict) -> str:
+        canonical_payload = json.dumps(payload, sort_keys=True, separators=(",", ":"))
+        return hashlib.sha256(canonical_payload.encode("utf-8")).hexdigest()

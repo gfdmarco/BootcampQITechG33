@@ -30,6 +30,17 @@ CREATE TABLE customer_status_event (
     created_at      TIMESTAMP NOT NULL DEFAULT NOW()
 );
 
+CREATE TABLE customer_idempotency_request (
+    id               SERIAL PRIMARY KEY,
+    idempotency_key  VARCHAR(120) NOT NULL,
+    customer_id      INTEGER NOT NULL REFERENCES customer(id),
+    request_hash     CHAR(64) NOT NULL,
+    response_status  INTEGER NOT NULL,
+    response_body    JSONB NOT NULL,
+    created_at       TIMESTAMP NOT NULL DEFAULT NOW(),
+    UNIQUE(idempotency_key)
+);
+
 CREATE TABLE account_status (
     id          SERIAL PRIMARY KEY,
     enumerator  VARCHAR(50) NOT NULL,

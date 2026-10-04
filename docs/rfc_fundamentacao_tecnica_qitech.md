@@ -126,6 +126,15 @@ erDiagram
         string reason
     }
 
+    CUSTOMER_IDEMPOTENCY_REQUEST {
+        int id PK
+        string idempotency_key UK
+        int customer_id FK
+        char request_hash
+        int response_status
+        jsonb response_body
+    }
+
     ACCOUNT {
         int id PK
         char account_key UK
@@ -261,6 +270,7 @@ erDiagram
 
     CUSTOMER }o--|| CUSTOMER_STATUS : "tem status atual"
     CUSTOMER ||--o{ CUSTOMER_STATUS_EVENT : "historico"
+    CUSTOMER_IDEMPOTENCY_REQUEST }o--|| CUSTOMER : "resposta replay"
     CUSTOMER ||--o{ ACCOUNT : "possui"
     ACCOUNT }o--|| ACCOUNT_STATUS : "tem status atual"
     ACCOUNT ||--o{ ACCOUNT_STATUS_EVENT : "historico"
@@ -288,6 +298,8 @@ O modelo usa identificadores internos sequenciais para relacionamento e chaves p
 O saldo de conta e os valores transacionais sao `BIGINT`, representando centavos. Essa decisao e correta para dinheiro porque evita erro de arredondamento de ponto flutuante e simplifica comparacoes como "saldo >= valor".
 
 O banco tambem cria tabelas de status e eventos de status para entidades centrais. Essa escolha sustenta auditoria: uma entidade nao apenas "esta" em um estado, ela deixa uma trilha de como chegou la.
+
+O cadastro de cliente tambem passa a ter uma tabela propria de idempotencia (`customer_idempotency_request`). Essa decisao remove ambiguidade operacional: se o cliente cria cadastro, a API comita e a resposta se perde por timeout, o retry com a mesma `Idempotency-Key` devolve a mesma resposta original em vez de transformar sucesso anterior em erro de duplicidade.
 
 ---
 

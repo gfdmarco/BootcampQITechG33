@@ -126,6 +126,16 @@ class InvalidBirthdate(QIException):
         translation = "A data de nascimento informada não existe."
         super().__init__(title, self.code, http_status, description, translation)
 
+class InvalidIdempotencyKey(QIException):
+    code = "QIT001027"
+
+    def __init__(self) -> None:
+        title = "Invalid Idempotency Key"
+        http_status = 409
+        description = "The Idempotency-Key was already used with a different payload."
+        translation = "A chave de idempotência já foi usada com outro corpo de requisição."
+        super().__init__(title, self.code, http_status, description, translation)
+
 class DuplicatedAccount(QIException):
     code = "QIT001010"
 
@@ -307,7 +317,7 @@ class InvalidExpirationDate(QIException):
         super().__init__(title, self.code, http_status, description, translation)
 
 class BankSlipNotPayable(QIException):
-    code = "QIT001026"          # ← o próximo livre na sua numeração
+    code = "QIT001026"
 
     def __init__(self, bank_slip_key, current_status) -> None:
         title = "Bank Slip Not Payable"

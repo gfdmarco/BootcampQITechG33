@@ -8,9 +8,9 @@ from utils.schema_handler import SchemaHandler
 
 class CustomerResource:
     @SchemaHandler.validate("post_customer.json")
-    def on_post(self, payload: dict) -> JSONResponse:
+    def on_post(self, payload: dict, request: Request) -> JSONResponse:
         controller = CustomerController()
-        customer = controller.create(payload)
+        customer = controller.create(payload, request.headers.get("Idempotency-Key"))
 
         return JSONResponse(
             content=jsonable_encoder(customer),

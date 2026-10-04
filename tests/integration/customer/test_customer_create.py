@@ -1,4 +1,6 @@
 from datetime import date
+from uuid import uuid4
+
 from tests.utils import PayloadGenerator, RandomGenerator, RequestGenerator
 from tests.utils.api_helpers import today_br
 
@@ -77,3 +79,26 @@ class TestCustomerCreate:
 
         assert status == 409
         assert response["code"] == "QIT001005"
+
+    def test_replays_customer_creation_with_same_idempotency_key(self):
+        payload = PayloadGenerator.create_customer_payload()
+        idempotency_key = str(uuid4())
+
+        first_status, first_response = RequestGenerator.POST_customer(payload, idempotency_key=idempotency_key)
+        second_status, second_response = RequestGenerator.POST_customer(payload, idempotency_key=idempotency_key)
+
+        assert first_status == 201
+        assert second_status == 201
+        assert second_response == first_response
+
+    def test_refuses_same_idempotency_key_with_different_payload(self):
+        idempotency_key = str(uuid4())
+        first_payload = PayloadGenerator.create_customer_payload()
+        second_payload = PayloadGenerator.create_customer_payload()
+
+        first_status, _ = RequestGenerator.POST_customer(first_payload, idempotency_key=idempotency_key)
+        second_status, second_response = RequestGenerator.POST_customer(second_payload, idempotency_key=idempotency_key)
+
+        assert first_status == 201
+        assert second_status == 409
+        assert second_response["code"] == "QIT001027"

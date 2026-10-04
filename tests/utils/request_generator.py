@@ -7,12 +7,16 @@ INTERNAL_TOKEN = environ.get("INTERNAL_TOKEN", "default_token")
 
 class RequestGenerator:
     @staticmethod
-    def POST_customer(customer_payload: dict) -> BaseConnectorResponse:
+    def POST_customer(customer_payload: dict, idempotency_key: str = None) -> BaseConnectorResponse:
+        headers = {"INTERNAL-TOKEN": INTERNAL_TOKEN}
+        if idempotency_key:
+            headers["Idempotency-Key"] = idempotency_key
+
         response = ClientRequisition.send(
             "POST",
             "/customers",
             payload=customer_payload,
-            headers={"INTERNAL-TOKEN": INTERNAL_TOKEN},
+            headers=headers,
         )
 
         return response.response_status, response.response_json
