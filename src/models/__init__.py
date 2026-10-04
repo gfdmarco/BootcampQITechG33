@@ -27,3 +27,4 @@ from models.corporate_audit import CorporateAudit
 from models.loan import Loan
 from models.loan_installment import LoanInstallment
 from models.notification import Notification
+from models.notification_outbox import NotificationOutbox

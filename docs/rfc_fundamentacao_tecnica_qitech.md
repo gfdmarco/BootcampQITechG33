@@ -347,7 +347,7 @@ sequenceDiagram
 
 ### Trade-off relevante
 
-Hoje o risco e chamado depois de `debit` e `credit`, mas antes do `commit`. Funciona se a sessao fizer rollback corretamente em qualquer negacao ou timeout acima do limite degradado. Ainda assim, do ponto de vista de clareza operacional, e mais facil raciocinar se a avaliacao de risco acontecer antes da mutacao de saldo, com uma estrategia separada para nao consumir limite de risco em transacao que falharia por saldo.
+Hoje o risco e chamado depois de `debit` e `credit`, mas antes do `commit`. Funciona se a sessao fizer rollback corretamente em qualquer negacao, timeout ou indisponibilidade do Risk. A regra de produto agora e fail closed: sem resposta confiavel do Risk, a transferencia e negada. Ainda assim, do ponto de vista de clareza operacional, e mais facil raciocinar se a avaliacao de risco acontecer antes da mutacao de saldo, com uma estrategia separada para nao consumir limite de risco em transacao que falharia por saldo.
 
 ---
 
@@ -505,7 +505,8 @@ O risco residual e operacional: se a confirmacao pos-commit falhar, a reserva fi
 | Risco como servico separado | `risk_engine/` + compose | Politicas antifraude evoluem sem mexer no core | Dependencia sincrona exige fallback bem definido |
 | Worker LLM assincrono | `risk_engine/worker` | Remove latencia/custo de IA do caminho critico | Score pode ficar defasado ate o proximo ciclo |
 | Redis para cache/read model | `risk_engine/src/connectors/redis_connector.py` | Reduz latencia e carga no Postgres de risco | Consumo verdadeiro fica em `risk_limit_consumption`; reservas antigas ainda precisam reconciliacao |
-| Notificacao pos-commit | `NotificationController` chamado apos transacao/conta | Comunicacao nao deve quebrar movimento financeiro | Notificacao ainda escreve no mesmo banco do core, nao e outbox real |
+| Risk fail closed | `RiskEngineConnector.evaluate_transaction` | Sem resposta confiavel do Risk, transferencia nao aprova por suposicao | Pode aumentar recusas durante indisponibilidade; precisa metrica/alerta |
+| Notificacao via outbox | `NotificationController` grava `notification_outbox` antes do commit e processa apos commit | Comunicacao nao deve quebrar movimento financeiro nem sumir em falha pos-commit | Ainda falta worker dedicado para reprocessar pendencias |
 | Conta interna de tesouraria | schema core + `get_bank_account` | Centraliza tarifas e pagamento de parcelas | Conta interna precisa ser tratada como entidade sistemica, nunca login operacional |
 
 ---
@@ -566,11 +567,11 @@ Recomendacao:
 - criar job de reconciliacao de boletos `pending`;
 - ou adotar outbox/estado `registering` com retry idempotente.
 
-### P2 - Notificacao ainda nao e modulo desacoplado de verdade
+### P2 - Notificacao ainda nao tem worker dedicado de reconciliacao
 
-A documentacao e o desenho apontam para notificacao por eventos, mas hoje `NotificationController` escreve direto no banco do core apos o commit.
+A documentacao e o desenho apontam para notificacao por eventos. Agora o core grava `notification_outbox` antes do commit e processa essa outbox logo depois, marcando o item como `processed`.
 
-Isso e aceitavel como primeiro passo porque isola a chamada atras de `publish_event`. A evolucao natural e trocar a implementacao por outbox, fila ou Redis stream sem mudar os chamadores.
+Isso resolve a parte mais importante antes de qualquer Redis/fila: o trabalho a processar fica persistido em tabela com `event_key`, status, tentativas e erro. A evolucao natural agora e criar um worker que busque pendencias com lock, reprocesse falhas e permita desacoplar o envio sem perder evento.
 
 ---
 
@@ -580,11 +581,14 @@ Isso e aceitavel como primeiro passo porque isola a chamada atras de `publish_ev
 |---|---|---|
 | P0 | Corrigir `CorporateAudit` e rodar testes PJ com API ligada | Transferencia PJ auditavel e validada |
 | P0 | Executar suite critica: transacao, boleto, loan, risk e PJ | Evidencia objetiva antes de demo |
+| Feito | Formalizar fail closed no Core -> Risk | Risk indisponivel nunca aprova por suposicao |
 | P1 | Criar reconciliacao de reservas de risco antigas | Sem limite preso quando confirmacao pos-commit falhar |
 | P1 | Formalizar titularidade neutra de conta | Evolucao limpa para PF/PJ |
 | P1 | Adicionar status/eventos para loan/installment | Auditoria consistente no dominio de credito |
 | P2 | Criar reconciliacao de boletos pendentes | Menos estados presos por falha externa |
-| P2 | Evoluir notificacoes para outbox/fila | Core financeiro menos acoplado |
+| Feito | Deduplicar notificacoes transacionais com `event_key` | Retry nao cria notificacao duplicada |
+| Feito | Persistir `notification_outbox` antes de Redis/fila | Evento nao some entre commit financeiro e processamento |
+| P2 | Criar worker de notificacao para processar outbox pendente | Core financeiro menos acoplado |
 | P2 | Revisar defaults secretos no compose para perfil nao-local | Evitar vazamento de configuracao insegura |
 
 ---

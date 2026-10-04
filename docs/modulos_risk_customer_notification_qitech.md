@@ -50,7 +50,7 @@ flowchart TD
 | Modulo | Fonte de verdade hoje | Tem tabela de estado? | Usa Redis? | Risco principal |
 |---|---|---|---|---|
 | Customer | PostgreSQL Core | Sim, `customer_status`, `customer_status_event` e `customer_idempotency_request` | Nao | Reconciliacao/expurgo futuro das chaves de idempotencia antigas |
-| Notification | PostgreSQL Core | Parcial: tabela final `notification`, sem outbox/event state | Nao no fluxo atual | Se virar async via Redis sem outbox, perde evento em falha |
+| Notification | PostgreSQL Core | Sim: `notification` e `notification_outbox` com `event_key` unico e status de processamento | Nao no fluxo atual | Falta worker dedicado/reconciliacao para reprocessar outbox pendente |
 | Risk Management | PostgreSQL Risk | Sim: `risk_profile`, `risk_evaluation_event`, `risk_evaluation_request` e `risk_limit_consumption` | Sim, como cache/read model | Reconciliacao futura de reservas que nunca forem confirmadas |
 
 ---
@@ -187,11 +187,27 @@ O core chama notificacao depois do commit da transferencia. Se a notificacao fal
 
 Essa decisao e correta. Notificacao e efeito colateral. O ledger nao deve depender dela.
 
-**2. Escrita centralizada em `publish_event`**
+**2. Outbox antes de Redis/fila**
+
+O fluxo transacional agora grava `notification_outbox` antes do commit do dinheiro. Depois do commit, o proprio processo transforma a outbox em linha final na tabela `notification` e marca a outbox como `processed`.
+
+Essa decisao reduz a janela critica: se o processamento da notificacao falhar depois do commit financeiro, o trabalho nao some; ele permanece no banco com status para reprocessamento.
+
+**3. Escrita centralizada em `publish_event`**
 
 Mesmo ainda sendo uma gravacao direta no banco, existe um ponto unico (`publish_event`) que concentra a escrita. Isso prepara bem uma evolucao futura para outbox/fila sem trocar todos os chamadores.
 
-**3. `mark_read` e idempotente**
+**4. Chave tecnica de evento para deduplicacao**
+
+As notificacoes transacionais agora recebem `event_key` persistido e unico. Para movimentacoes financeiras, a chave deriva de `transaction_key` e do papel da notificacao:
+
+- `transaction:{transaction_key}:sender`;
+- `transaction:{transaction_key}:receiver`;
+- `transaction:{transaction_key}:deposit`.
+
+Com isso, se uma rotina tentar publicar a mesma notificacao transacional mais de uma vez, o modulo reusa a linha existente em vez de duplicar mensagem para o cliente.
+
+**5. `mark_read` e idempotente**
 
 Marcar a mesma notificacao como lida duas vezes retorna sucesso. Isso e bom: leitura de notificacao e comando naturalmente idempotente.
 
@@ -216,9 +232,9 @@ Cenarios problematicos:
 
 Para notificacao, perder evento talvez nao quebre dinheiro, mas quebra confianca do produto. Para modulos de risco/processamento, a mesma falha vira problema mais grave.
 
-### Recomendacao QI Tech: outbox antes de Redis
+### Decisao QI Tech: outbox antes de Redis
 
-Redis pode ser transporte/cache. A fonte do que deve ser processado precisa estar em tabela.
+Redis pode ser transporte/cache. A fonte do que deve ser processado precisa estar em tabela. Para Notification, essa tabela agora e `notification_outbox`.
 
 ```mermaid
 sequenceDiagram
@@ -229,21 +245,20 @@ sequenceDiagram
 
     Core->>DB: COMMIT transacao financeira
     Core->>DB: INSERT notification_outbox status=pending
-    Worker->>DB: SELECT pending FOR UPDATE SKIP LOCKED
-    Worker->>DB: cria notification
-    Worker->>DB: marca outbox processed
+    Core->>DB: processamento imediato cria notification
+    Core->>DB: marca outbox processed
     Worker->>Redis: opcional: cache/invalidate/push realtime
 ```
 
-Tabela sugerida:
+Tabela implementada:
 
 ```sql
 CREATE TABLE notification_outbox (
     id SERIAL PRIMARY KEY,
-    event_key CHAR(36) NOT NULL,
+    event_key VARCHAR(120) NOT NULL,
     customer_key CHAR(36) NOT NULL,
-    event_type VARCHAR(50) NOT NULL,
-    payload JSONB NOT NULL,
+    title VARCHAR(100) NOT NULL,
+    body TEXT NOT NULL,
     status VARCHAR(20) NOT NULL DEFAULT 'pending',
     attempts INTEGER NOT NULL DEFAULT 0,
     last_error TEXT,
@@ -259,6 +274,8 @@ Com isso:
 - se processar duas vezes, `event_key` evita duplicidade;
 - se der erro, `attempts` e `last_error` contam a historia;
 - Redis pode acelerar, mas nao guarda a unica copia do trabalho.
+
+O passo implementado neste ciclo cria a outbox e processa imediatamente no proprio fluxo da API. O proximo passo, se o time quiser desacoplar de verdade, e criar um worker que busque `pending` com `FOR UPDATE SKIP LOCKED`.
 
 ---
 
@@ -452,18 +469,18 @@ No risk:
 - Worker chama Risk Engine com timeout de 5s;
 - Worker chama Core Internal API com timeout de 5s;
 - Worker chama Groq com retry e backoff;
-- Core chama Risk Engine em transferencia com timeout fixo de 2s;
-- se o Risk Engine falhar, o Core entra em modo degradado e bloqueia transacoes acima de R$ 1000.
+- Core chama Risk Engine em transferencia com timeout configuravel por `RISK_ENGINE_TIMEOUT`;
+- se o Risk Engine falhar, demorar ou devolver resposta inesperada, o Core nega a transferencia por seguranca.
 
 ### Ponto de atencao
 
-`RiskEngineConnector.evaluate_transaction` nao usa o `RestConnector.send`; ele chama `requests.post` direto com `timeout=2`. Isso nao e necessariamente errado: transferencia e caminho critico, entao timeout menor pode ser intencional.
+`RiskEngineConnector.evaluate_transaction` nao usa o `RestConnector.send`; ele chama `requests.post` direto porque precisa tratar a decisao do Risk de forma explicita. O timeout vem de `RISK_ENGINE_TIMEOUT`.
 
-Mas precisa estar documentado como regra de produto:
+Regra de produto definida:
 
 | Chamada | Timeout atual | Comportamento em falha |
 |---|---:|---|
-| Core -> Risk `/evaluate` | 2s fixo | modo degradado: permite ate R$ 1000, bloqueia acima |
+| Core -> Risk `/evaluate` | `RISK_ENGINE_TIMEOUT` | fail closed: nega a transferencia |
 | Connector base | configuravel por env | quem chama decide |
 | Worker -> Core historico | 5s | historico vazio ou falha do cliente especifico |
 | Worker -> Risk profile | 5s | nao atualiza aquele perfil |
@@ -471,12 +488,12 @@ Mas precisa estar documentado como regra de produto:
 
 ### Recomendacao
 
-Manter fail-fast no caminho de transferencia, mas levar a regra para configuracao:
+Manter fail-fast no caminho de transferencia e nao aprovar por suposicao:
 
-- `RISK_ENGINE_EVALUATE_TIMEOUT=2`;
-- `RISK_ENGINE_DEGRADED_LIMIT=100000`;
+- `RISK_ENGINE_TIMEOUT=3` como default atual;
 - logs com `customer_key`, `amount`, `transaction_type`, decisao e motivo;
-- metrica de quantas transacoes cairam em degraded mode.
+- metrica de quantas transacoes foram negadas por indisponibilidade do Risk;
+- alerta se a taxa de `Risk Engine unavailable or timed out` subir.
 
 ---
 
@@ -496,7 +513,7 @@ Manter fail-fast no caminho de transferencia, mas levar a regra para configuraca
 |---|---|
 | `POST /customers` | Retry apos timeout vira duplicidade, nao replay da resposta original |
 | `POST /transactions` com Risk | Risk `/evaluate` pode consumir limite duas vezes se houver retry |
-| Notification async futuro | Sem outbox/event_key pode perder ou duplicar notificacao |
+| Notification async futuro | Outbox ja persiste o trabalho; falta worker dedicado para reprocessar pendencias |
 | LLM Worker | Reprocessa perfis por tempo/unknown, mas nao registra tentativa com estado |
 
 ### Padrao recomendado
@@ -569,9 +586,10 @@ flowchart TD
 | P0 | Risk | Criar idempotencia para `/evaluate` | Evita consumo duplicado de limite em retry |
 | P0 | Risk | Persistir consumo de limite diario em tabela | Redis nao pode ser a unica fonte do limite |
 | P1 | Risk | Reconciliar reservas antigas de `risk_limit_consumption` | Evita limite preso quando confirmacao pos-commit falhar |
-| P1 | Notification | Criar `notification_outbox` antes de usar Redis/fila | Evita perda de evento apos commit financeiro |
+| Feito | Notification | Criar `event_key` unico em `notification` | Evita notificacao transacional duplicada em retry |
+| Feito | Notification | Criar `notification_outbox` antes de usar Redis/fila | Evita perda de evento apos commit financeiro |
 | Feito | Customer | Remover status `failed` duplicado no delete | Limpa auditoria e evita trilha confusa |
-| P1 | Core/Risk | Configurar timeout e degraded limit por env | Deixa regra operacional explicita |
+| Feito | Core/Risk | Formalizar timeout fail closed no `/evaluate` | Risk indisponivel nunca aprova por suposicao |
 | P2 | Worker | Registrar tentativas de LLM com status | Permite retry, auditoria e investigacao |
 | Feito | Customer | Idempotency-Key em `POST /customers` | Retry seguro quando resposta se perde |
 
@@ -581,7 +599,7 @@ flowchart TD
 
 Os tres modulos estao no caminho certo, mas em maturidades diferentes.
 
-Customer ficou mais proximo do padrao ideal: tem estado atual, historico de status, validacoes de dominio, delete logico e idempotencia persistida na criacao. Notification esta simples e funcional, mas antes de virar assincrono precisa de outbox. Risk agora tem uma separacao mais madura: cache de perfil em Redis continua reconstruivel, enquanto historico de score, requisicoes idempotentes e consumo de limite passaram a ter tabela persistente.
+Customer ficou mais proximo do padrao ideal: tem estado atual, historico de status, validacoes de dominio, delete logico e idempotencia persistida na criacao. Notification continua simples e funcional, agora com outbox persistida e deduplicacao por `event_key`; antes de virar assincrono, ainda precisa de worker/reconciliacao. Risk agora tem uma separacao mais madura: cache de perfil em Redis continua reconstruivel, enquanto historico de score, requisicoes idempotentes e consumo de limite passaram a ter tabela persistente.
 
 Em frase curta para levar ao tech lead:
 

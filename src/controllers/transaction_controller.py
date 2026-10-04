@@ -185,6 +185,25 @@ class TransactionController(BaseController):
         _amount = payload["amount"]
         _channel = payload["channel"]
 
+        from controllers.notification_controller import NotificationController
+
+        notifier = NotificationController()
+        if transaction_type == "transfer":
+            notification_event_keys = notifier.enqueue_transfer(
+                _sender_key,
+                _receiver_key,
+                _amount,
+                _channel,
+                transaction_key=_transaction_key,
+            )
+        else:
+            notification_event_keys = notifier.enqueue_deposit(
+                _receiver_key,
+                _amount,
+                _channel,
+                transaction_key=_transaction_key,
+            )
+
         self.session.commit()
 
         if transaction_type == "transfer" and risk_evaluation_key:
@@ -192,13 +211,7 @@ class TransactionController(BaseController):
 
         # Notificacao fire-and-forget: nunca quebra a transferencia.
         try:
-            from controllers.notification_controller import NotificationController
-
-            notifier = NotificationController()
-            if transaction_type == "transfer":
-                notifier.notify_transfer(_sender_key, _receiver_key, _amount, _channel)
-            else:
-                notifier.notify_deposit(_receiver_key, _amount, _channel)
+            notifier.process_event_keys(notification_event_keys)
             notifier.session.commit()
         except Exception:
             self.logger.exception("Falha ao criar notificacao de transacao")

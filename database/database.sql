@@ -239,12 +239,27 @@ CREATE TABLE loan_installment (
 CREATE TABLE notification (
     id           SERIAL PRIMARY KEY,
     key          CHAR(36)      NOT NULL,
+    event_key    VARCHAR(120)  NOT NULL,
     customer_key CHAR(36)      NOT NULL,
     title        VARCHAR(100)  NOT NULL,
     body         TEXT          NOT NULL,
     is_read      BOOLEAN       NOT NULL DEFAULT FALSE,
     created_at   TIMESTAMP     NOT NULL DEFAULT NOW(),
-    UNIQUE(key)
+    UNIQUE(key), UNIQUE(event_key)
+);
+
+CREATE TABLE notification_outbox (
+    id           SERIAL PRIMARY KEY,
+    event_key    VARCHAR(120)  NOT NULL,
+    customer_key CHAR(36)      NOT NULL,
+    title        VARCHAR(100)  NOT NULL,
+    body         TEXT          NOT NULL,
+    status       VARCHAR(20)   NOT NULL DEFAULT 'pending',
+    attempts     INTEGER       NOT NULL DEFAULT 0,
+    last_error   TEXT,
+    created_at   TIMESTAMP     NOT NULL DEFAULT NOW(),
+    processed_at TIMESTAMP,
+    UNIQUE(event_key)
 );
 
 -- ============================================

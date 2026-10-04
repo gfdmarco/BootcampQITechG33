@@ -96,16 +96,20 @@ class AccountController(BaseController):
 
         _owner_key = account.customer.customer_key.strip()
         _new_status = new_status.value if hasattr(new_status, "value") else new_status
+        notification_event_keys = []
+
+        if _new_status in ("blocked", "active"):
+            from controllers.notification_controller import NotificationController
+
+            notifier = NotificationController()
+            notification_event_keys = notifier.enqueue_account_status(_owner_key, _new_status)
 
         self.session.commit()
 
         # Notificacao fire-and-forget: nunca quebra a mudanca de status.
-        if _new_status in ("blocked", "active"):
+        if notification_event_keys:
             try:
-                from controllers.notification_controller import NotificationController
-
-                notifier = NotificationController()
-                notifier.notify_account_status(_owner_key, _new_status)
+                notifier.process_event_keys(notification_event_keys)
                 notifier.session.commit()
             except Exception:
                 self.logger.exception("Falha ao criar notificacao de conta")
