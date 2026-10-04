@@ -46,7 +46,7 @@ class RiskEngineConnector(RestConnector):
             logger.error(f"Erro ao consultar Risk Engine para {customer_key}: {e}. Fallback para 'unknown'.")
             return "unknown"
 
-    def evaluate_transaction(self, customer_key: str, amount: int, transaction_type: str) -> None:
+    def evaluate_transaction(self, customer_key: str, amount: int, transaction_type: str, evaluation_key: str) -> None:
         """
         Avalia a transação no Risk Engine (POST /evaluate).
 
@@ -56,6 +56,7 @@ class RiskEngineConnector(RestConnector):
         """
         try:
             payload = {
+                "evaluation_key": evaluation_key,
                 "customer_key": customer_key,
                 "amount": amount,
                 "transaction_type": transaction_type,
@@ -83,3 +84,30 @@ class RiskEngineConnector(RestConnector):
             DEGRADED_MODE_LIMIT = 100000  # R$ 1000 em centavos
             if amount > DEGRADED_MODE_LIMIT:
                 raise RiskEngineDenied("Transação negada pois excede o limite restrito do modo de segurança.")
+
+    def confirm_evaluation(self, evaluation_key: str, transaction_key: str) -> None:
+        """Confirma no Risk Engine que a transferência comitou no Core.
+
+        A confirmação não participa do commit financeiro. Se falhar, o
+        Risk ainda mantém a avaliação como reserved, e uma reconciliação
+        futura pode resolver. O Core não desfaz dinheiro por falha nesta
+        chamada pós-commit.
+        """
+        try:
+            headers = {
+                "INTERNAL-TOKEN": os.getenv("RISK_INTERNAL_TOKEN", "risk_default_token")
+            }
+            response = requests.post(
+                f"{RISK_ENGINE_URL}/evaluate/{evaluation_key}/confirm",
+                json={"transaction_key": transaction_key},
+                headers=headers,
+                timeout=2,
+            )
+            if response.status_code not in (200, 404):
+                logger.warning(
+                    "Risk Engine retornou %s ao confirmar avaliação %s",
+                    response.status_code,
+                    evaluation_key,
+                )
+        except requests.exceptions.RequestException as e:
+            logger.warning("Falha ao confirmar avaliação de risco %s: %s", evaluation_key, e)

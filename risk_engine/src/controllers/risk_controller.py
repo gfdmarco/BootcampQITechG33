@@ -1,10 +1,10 @@
-import os
 import logging
+from uuid import uuid4
 
 from connectors import RedisCacheConnector
 from database import Context
 from dtos import EvaluationDTO, RiskProfileDTO
-from errors import TransactionDeniedByRisk, ProfileNotFound, InvalidScoreValue
+from errors import EvaluationNotFound, InvalidIdempotencyKey, ProfileNotFound, InvalidScoreValue
 from models import RiskScoreStatus
 from repositories import RiskRepository
 
@@ -21,7 +21,7 @@ class RiskController:
 
     # ── Avaliação de Transação ──────────────────────────────────────────
 
-    def evaluate(self, customer_key: str, amount: int, transaction_type: str) -> dict:
+    def evaluate(self, customer_key: str, amount: int, transaction_type: str, evaluation_key: str = None) -> dict:
         """
         Avalia se uma transação deve ser aprovada ou negada.
 
@@ -32,11 +32,24 @@ class RiskController:
 
         Clientes sem perfil recebem tratamento UNKNOWN (política padrão).
         """
+        evaluation_key = evaluation_key or str(uuid4())
+        previous = self.repository.get_evaluation_request(evaluation_key)
+        if previous is not None:
+            if (
+                previous.customer_key.strip() != customer_key
+                or previous.transaction_type != transaction_type
+                or previous.amount != amount
+            ):
+                raise InvalidIdempotencyKey()
+            return EvaluationDTO.from_request(previous)
+
         # ── Camada 1: Cache Redis ──
         cached = self.cache.get_evaluation_cache(customer_key)
         if cached is not None:
             logger.debug(f"Cache HIT para {customer_key}")
-            return self._decide(cached, amount, transaction_type, customer_key)
+            result = self._decide(cached, amount, transaction_type, customer_key)
+            self._persist_decision(evaluation_key, customer_key, transaction_type, amount, result)
+            return result
 
         # ── Camada 2: Banco de Dados (fallback) ──
         logger.debug(f"Cache MISS para {customer_key}, consultando Postgres")
@@ -45,7 +58,9 @@ class RiskController:
         # Popula o cache para as próximas chamadas
         self.cache.set_evaluation_cache(customer_key, eval_data)
 
-        return self._decide(eval_data, amount, transaction_type, customer_key)
+        result = self._decide(eval_data, amount, transaction_type, customer_key)
+        self._persist_decision(evaluation_key, customer_key, transaction_type, amount, result)
+        return result
 
     def _build_evaluation_data(self, customer_key: str) -> dict:
         """
@@ -90,18 +105,38 @@ class RiskController:
                 )
                 return EvaluationDTO.denied(score, reason)
 
-            daily_spend = self.cache.get_daily_spend(customer_key, transaction_type)
+            daily_spend = self.repository.get_daily_consumption(customer_key, transaction_type)
             if amount + daily_spend > policy["max_amount_daily"]:
                 reason = (
                     f"DAILY_LIMIT_EXCEEDED: amount {amount} + daily spend {daily_spend} "
                     f"exceeds max daily {policy['max_amount_daily']} for score {score}"
                 )
                 return EvaluationDTO.denied(score, reason)
-                
-            # Increments optimistic daily spend (we assume it succeeds)
-            self.cache.increment_daily_spend(customer_key, transaction_type, amount)
 
         return EvaluationDTO.approved(score)
+
+    def _persist_decision(self, evaluation_key: str, customer_key: str, transaction_type: str, amount: int, result: dict) -> None:
+        reason = result.get("reason")
+        self.repository.create_evaluation_request(
+            evaluation_key=evaluation_key,
+            customer_key=customer_key,
+            transaction_type=transaction_type,
+            amount=amount,
+            score=result["score"],
+            decision=result["action"],
+            reason=reason,
+        )
+
+        if result["action"] == "APPROVE":
+            self.repository.create_limit_consumption(
+                evaluation_key=evaluation_key,
+                customer_key=customer_key,
+                transaction_type=transaction_type,
+                amount=amount,
+            )
+            self.cache.increment_daily_spend(customer_key, transaction_type, amount)
+
+        self.context.db_session.commit()
 
     # ── Atualização de Perfil (LLM Worker) ──────────────────────────────
 
@@ -114,7 +149,7 @@ class RiskController:
         if score not in VALID_SCORES:
             raise InvalidScoreValue(score)
 
-        profile = self.repository.upsert_profile(customer_key, score, reason)
+        profile = self.repository.upsert_profile(customer_key, score, reason, evaluated_by="llm_worker")
 
         self.context.db_session.commit()
         self.context.db_session.refresh(profile)
@@ -138,3 +173,10 @@ class RiskController:
         from dtos import RiskProfileDTO
         profiles = self.repository.list_all_profiles()
         return [RiskProfileDTO.to_dict(p) for p in profiles]
+
+    def confirm_evaluation(self, evaluation_key: str, transaction_key: str = None) -> dict:
+        found = self.repository.confirm_consumption(evaluation_key, transaction_key)
+        if not found:
+            raise EvaluationNotFound(evaluation_key)
+        self.context.db_session.commit()
+        return {"evaluation_key": evaluation_key, "status": "confirmed"}

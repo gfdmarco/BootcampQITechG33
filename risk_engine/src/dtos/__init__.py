@@ -18,3 +18,10 @@ class EvaluationDTO:
     @staticmethod
     def denied(score: str, reason: str) -> dict:
         return {"action": "DENY", "score": score, "reason": reason}
+
+    @staticmethod
+    def from_request(request) -> dict:
+        dto = {"action": request.decision, "score": request.score}
+        if request.reason:
+            dto["reason"] = request.reason
+        return dto

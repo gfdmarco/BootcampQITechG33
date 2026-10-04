@@ -22,6 +22,7 @@ from repositories import (
 from datetime import datetime, timedelta
 from constants import BANK_ACCOUNT_KEY
 from utils.clock import business_now
+from uuid import uuid4
 
 
 VALID_TRANSACTION_TYPES = ("deposit", "transfer")
@@ -86,6 +87,7 @@ class TransactionController(BaseController):
         origin_account = None
         fee_amount = 0
         fee_obj = None
+        risk_evaluation_key = None
 
         if transaction_type == "deposit":
             # Depósito não tem origem nem tarifa.
@@ -140,10 +142,12 @@ class TransactionController(BaseController):
         # evitar "Ghost Spend" (limite consumido por transação que falhou).
         # Se negar, levanta RiskEngineDenied (403) e o SQLAlchemy faz rollback.
         if payload.get("type") == "transfer":
+            risk_evaluation_key = str(uuid4())
             self.risk_connector.evaluate_transaction(
                 customer_key=authenticated_customer_key,
                 amount=payload.get("amount", 0),
-                transaction_type=payload.get("channel")
+                transaction_type=payload.get("channel"),
+                evaluation_key=risk_evaluation_key,
             )
 
         if fee_amount > 0:
@@ -173,6 +177,7 @@ class TransactionController(BaseController):
         self.session.flush()
         # Passa pelo DTO antes do commit final.
         transaction_dto = TransactionDTO.only_obj_key(transaction)
+        _transaction_key = transaction.transaction_key.strip()
 
         # Captura valores simples ANTES do commit (objetos expiram depois).
         _sender_key = authenticated_customer_key
@@ -181,6 +186,9 @@ class TransactionController(BaseController):
         _channel = payload["channel"]
 
         self.session.commit()
+
+        if transaction_type == "transfer" and risk_evaluation_key:
+            self.risk_connector.confirm_evaluation(risk_evaluation_key, _transaction_key)
 
         # Notificacao fire-and-forget: nunca quebra a transferencia.
         try:
