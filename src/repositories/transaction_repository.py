@@ -28,6 +28,7 @@ class TransactionRepository:
         transaction.fee_amount = transaction_data.get("fee_amount", 0)
         transaction.type = transaction_data["type"]
         transaction.channel = transaction_data["channel"]
+        transaction.idempotency_key = transaction_data.get("idempotency_key")
 
         # Geramos a chave pública segura.
         transaction.transaction_key = str(uuid4())
@@ -64,6 +65,10 @@ class TransactionRepository:
 
     def get_status(self, enumerator: str) -> TransactionStatus:
         return self.session.query(TransactionStatus).filter(TransactionStatus.enumerator == enumerator).one()
+
+    def get_by_idempotency_key(self, idempotency_key: str) -> Transaction:
+        """A transação já feita com esta chave de idempotência, ou None."""
+        return self.session.query(Transaction).filter(Transaction.idempotency_key == idempotency_key).first()
 
     def get_by_key(self, transaction_key: str) -> Transaction:
         return self.session.query(Transaction).filter(Transaction.transaction_key == transaction_key).first()

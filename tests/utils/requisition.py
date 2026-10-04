@@ -1,4 +1,7 @@
 import json
+import re
+from uuid import uuid4
+
 from requests import request, Response
 from requests.exceptions import ConnectionError as RequestsConnectionError
 from os import environ
@@ -8,6 +11,33 @@ API_OFFLINE = (
     "Não consegui falar com a API em {base_url}.\n"
     "Ela precisa estar de pé pros testes rodarem. Suba com:  docker compose up"
 )
+
+
+# Rotas em que a API exige o header Idempotency-Key (UUID gerado por quem
+# chama). Um cliente de verdade gera uma chave por operação e reaproveita a
+# mesma só quando repete aquela operação. Os testes fazem igual: se o teste
+# não mandou chave, mandamos uma nova a cada chamada.
+_IDEMPOTENT_ROUTES = [
+    re.compile(r"^/transactions/?$"),
+    re.compile(r"^/customers/[^/]+/accounts/?$"),
+    re.compile(r"^/loans/?$"),
+]
+
+
+def _with_idempotency_key(method: str, endpoint: str, headers: dict) -> dict:
+    """Acrescenta Idempotency-Key nas rotas que exigem, se faltar.
+
+    Para testar a ausência da chave, passe headers={"Idempotency-Key": None}:
+    o None tira o header em vez de gerar um.
+    """
+    headers = dict(headers)
+    if "Idempotency-Key" in headers:
+        if headers["Idempotency-Key"] is None:
+            del headers["Idempotency-Key"]
+        return headers
+    if method.upper() == "POST" and any(r.match(endpoint) for r in _IDEMPOTENT_ROUTES):
+        headers["Idempotency-Key"] = str(uuid4())
+    return headers
 
 
 class ClientRequisition:
@@ -25,6 +55,7 @@ class ClientRequisition:
 
         if headers is None:
             headers = dict()
+        headers = _with_idempotency_key(method, endpoint, headers)
 
         api_host = environ.get("SERVER_LOCALHOST", "0.0.0.0")
         api_port = environ.get("API_PORT", "3000")

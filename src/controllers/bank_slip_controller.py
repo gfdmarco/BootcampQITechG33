@@ -57,7 +57,9 @@ class BankSlipController(BaseController):
         self.session.flush()
         bank_slip_dto = BankSlipDTO.obj_to_dict(bank_slip)
         self.session.commit()
-        return bank_slip_dto
+        result = bank_slip_dto
+        self._log_return("Boleto emitido", result)
+        return result
 
     def _fail(self, bank_slip, reason: str) -> None:
         self.logger.warning(f"Bank slip {bank_slip.bank_slip_key} failed: {reason}")
@@ -96,7 +98,9 @@ class BankSlipController(BaseController):
         self.session.flush()
         dto = BankSlipDTO.obj_to_dict(bank_slip)
         self.session.commit()
-        return dto
+        result = dto
+        self._log_return("Boleto pago", result)
+        return result
 
     def get_by_key(self, bank_slip_key: str, token_customer_key: str) -> dict:
         bank_slip = self.bank_slip_repository.get_by_key(bank_slip_key)
@@ -104,7 +108,9 @@ class BankSlipController(BaseController):
             raise NotFoundBankSlip(bank_slip_key)
         if bank_slip.account.customer.customer_key != token_customer_key:
             raise ForbiddenAction()
-        return BankSlipDTO.obj_to_dict(bank_slip)
+        result = BankSlipDTO.obj_to_dict(bank_slip)
+        self._log_return("Boleto consultado", result)
+        return result
 
     def list_by_account(self, account_key: str, token_customer_key: str, limit: int, offset: int) -> dict:
         account = self._get_owned_account(account_key, token_customer_key)
@@ -114,10 +120,12 @@ class BankSlipController(BaseController):
         is_last_page = len(bank_slips) <= limit      # não veio o item extra → acabou
         bank_slips = bank_slips[:limit]              # descarta o extra antes de responder
 
-        return {
+        result = {
             "data": BankSlipDTO.list_obj_to_list_dict(bank_slips),
             "is_last_page": is_last_page,
         }
+        self._log_return("Lista de boletos retornada", result)
+        return result
 
     def _get_owned_account(self, account_key: str, token_customer_key: str):
         account = self.account_repository.get_by_key(account_key)

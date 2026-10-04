@@ -17,10 +17,12 @@ class Account(Base):
     status_id = Column(Integer, ForeignKey(AccountStatus.id), nullable=False)
     created_at = Column(DateTime, nullable=False, server_default=func.now())
     updated_at = Column(DateTime, nullable=False, server_default=func.now(), onupdate=func.now())
+    idempotency_key = Column(String(120), nullable=True)   # header Idempotency-Key da abertura
 
     __table_args__ = (
         UniqueConstraint("account_key"),
         UniqueConstraint("branch", "number"),
+        UniqueConstraint("idempotency_key"),
         CheckConstraint("balance >= 0"),
     )
 

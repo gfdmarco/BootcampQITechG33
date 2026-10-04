@@ -24,12 +24,17 @@ class AccountRepository:
         account.branch = account_data["branch"]
         account.number = account_data["number"]
         account.type = account_data["type"]
+        account.idempotency_key = account_data.get("idempotency_key")
         account.balance = 0
         # pela relationship, o status_id é construído pelo SQLAlchemy
         account.status = self.get_status(AccountStatus.CREATED)
 
         self.session.add(account)
         return account
+
+    def get_by_idempotency_key(self, idempotency_key: str) -> Account:
+        """A conta já aberta com esta chave de idempotência, ou None."""
+        return self.session.query(Account).filter(Account.idempotency_key == idempotency_key).first()
 
     def update_status(self, account: Account, new_status_enumerator: str) -> None:
         old_status = account.status

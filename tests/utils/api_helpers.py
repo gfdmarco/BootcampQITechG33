@@ -11,9 +11,13 @@ from tests.utils.requisition import ClientRequisition
 
 
 def call(method: str, path: str, token: str = None, payload: dict = None,
-         params: dict = None, internal_token: bool = True):
-    """Requisição genérica, para rotas que o RequestGenerator não cobre."""
-    headers = {}
+         params: dict = None, internal_token: bool = True, headers: dict = None):
+    """Requisição genérica, para rotas que o RequestGenerator não cobre.
+
+    `headers` acrescenta cabeçalhos — por exemplo {"Idempotency-Key": chave}
+    para repetir um pedido, ou {"Idempotency-Key": None} para mandar sem.
+    """
+    headers = dict(headers or {})
     if internal_token:
         headers["INTERNAL-TOKEN"] = INTERNAL_TOKEN
     if token:

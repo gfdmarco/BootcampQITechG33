@@ -3,7 +3,11 @@ from fastapi import status
 from fastapi.encoders import jsonable_encoder
 from fastapi.responses import JSONResponse
 
+import hmac
+
+from constants import BANKSLIP_WEBHOOK_TOKEN
 from controllers import BankSlipController
+from errors import ForbiddenAction
 from utils.schema_handler import SchemaHandler
 
 DEFAULT_LIMIT = 10
@@ -33,8 +37,17 @@ class BankSlipResource:
             status_code=status.HTTP_200_OK,
         )
 
-    def on_post_webhook_paid(self, bank_slip_key: str) -> JSONResponse:
-        """Chamado pelo SERVIÇO DE BOLETOS, não pelo cliente: sem JWT, só INTERNAL-TOKEN."""
+    def on_post_webhook_paid(self, bank_slip_key: str, request: Request) -> JSONResponse:
+        """Chamado pelo SERVIÇO DE BOLETOS, não pelo cliente.
+
+        Sem JWT (não há cliente logado), mas com dois cabeçalhos: o
+        INTERNAL-TOKEN, que o middleware já cobra, e o BANKSLIP-WEBHOOK-TOKEN,
+        o segredo que só o provedor tem. Sem o segundo, 403: o INTERNAL-TOKEN
+        sozinho qualquer app cliente também tem.
+        """
+        if not hmac.compare_digest(request.headers.get("BANKSLIP-WEBHOOK-TOKEN", ""), BANKSLIP_WEBHOOK_TOKEN):
+            raise ForbiddenAction()
+
         controller = BankSlipController()
         bank_slip = controller.pay(bank_slip_key)
         #nao precisa de customer_key pois é chamado de fora

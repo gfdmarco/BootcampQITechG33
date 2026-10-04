@@ -19,9 +19,11 @@ class Transaction(Base):
     status_id = Column(Integer, ForeignKey(TransactionStatus.id), nullable=False)
     created_at = Column(DateTime, nullable=False, server_default=func.now())
     updated_at = Column(DateTime, nullable=False, server_default=func.now(), onupdate=func.now())
+    idempotency_key = Column(String(120), nullable=True)   # header Idempotency-Key do POST /transactions
 
     __table_args__ = (
         UniqueConstraint("transaction_key"),
+        UniqueConstraint("idempotency_key"),
         CheckConstraint("type <> 'transfer' OR origin_account_id IS NOT NULL"),
     )
     

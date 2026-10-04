@@ -2,6 +2,7 @@ from abc import ABCMeta
 
 from database import get_context
 from utils.logger import get_logger
+from utils.safe_log import format_fields
 
 
 class BaseController(metaclass=ABCMeta):
@@ -22,3 +23,18 @@ class BaseController(metaclass=ABCMeta):
         self.context = get_context()
         self.session = self.context.get_or_create_session()
         self.logger = get_logger(class_name)
+
+    def _log_return(self, message: str, data=None, **events) -> None:
+        """Escreve no log o que esta requisição devolveu — sem dado sensível.
+
+        `data` é o que vai voltar (o DTO); passa por utils/safe_log.sanitize,
+        que mascara CPF/CNPJ/e-mail, remove senha e esconde token. `events`
+        descreve o que não pode ir no log, só o resultado:
+        `senha="criada"`, `senha="conferida"`.
+
+        Mesmo formato do middleware: a linha ganha sozinha o request_id.
+        """
+        fields = format_fields(data) if data is not None else ""
+        extra = " ".join(f"{key}={value}" for key, value in events.items())
+        details = " ".join(part for part in (fields, extra) if part)
+        self.logger.info(f"RETORNO {message}" + (f" | {details}" if details else ""))

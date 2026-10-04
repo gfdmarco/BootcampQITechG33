@@ -8,8 +8,9 @@ from models import AccountStatus, TransactionStatus
 from repositories import AccountRepository, TransactionRepository
 from connectors.risk_engine_connector import RiskEngineConnector
 from utils.clock import business_now
+from utils.idempotency import lock_idempotency_key
 from errors.custom_errors import HighRiskProfile, InsufficientBalanceForInstallment, InstallmentNotFound, NotFoundAccount, InvalidLoanAmount
-from errors import ForbiddenAction
+from errors import ForbiddenAction, InvalidIdempotencyKey
 
 
 
@@ -69,17 +70,39 @@ class LoanController(BaseController):
                 "amount": amount
             })
             
-        return {
+        result = {
             "requested_amount": requested_amount,
             "total_amount_due": total_amount_due,
             "interest_rate": interest_rate,
             "installments_count": installments_count,
             "installments": installments
         }
+        self._log_return("Empréstimo simulado", result)
+        return result
 
-    def create_loan(self, account_key: str, requested_amount: int, installments_count: int, authenticated_customer_key: str) -> dict:
-        """Disburses a loan to the account after risk approval."""
-        
+    def create_loan(self, account_key: str, requested_amount: int, installments_count: int,
+                    authenticated_customer_key: str, idempotency_key: str = None) -> dict:
+        """Contrata o empréstimo e credita o valor. Idempotente pela requisição.
+
+        Mesmo modelo da transferência: a chave vem do cliente (header
+        Idempotency-Key). Repetir a contratação depois de um timeout ou de
+        um clique duplo devolve o MESMO empréstimo, sem crédito novo e sem
+        chamar o Motor de Risco de novo. A mesma chave com outro pedido
+        (outra conta, valor ou número de parcelas, ou de outro cliente) é
+        recusada com 409.
+        """
+        if idempotency_key is not None:
+            lock_idempotency_key(self.session, "loan", idempotency_key)
+
+            existing = self.session.query(Loan).filter(Loan.idempotency_key == idempotency_key).first()
+            if existing is not None:
+                if not self._is_same_loan(existing, account_key, requested_amount,
+                                          installments_count, authenticated_customer_key):
+                    raise InvalidIdempotencyKey()
+                existing_dto = self._loan_to_dict(existing)
+                self._log_return("Contratação de empréstimo repetida: devolvendo a original", existing_dto)
+                return existing_dto
+
         # Reuse simulation logic for pure math and risk evaluation
         sim_data = self.simulate_loan(account_key, requested_amount, installments_count, authenticated_customer_key)
         
@@ -91,7 +114,8 @@ class LoanController(BaseController):
             requested_amount=requested_amount,
             total_amount_due=sim_data["total_amount_due"],
             interest_rate=sim_data["interest_rate"],
-            status="active"
+            status="active",
+            idempotency_key=idempotency_key,
         )
         
         # Create installments
@@ -121,6 +145,16 @@ class LoanController(BaseController):
         self.session.add(loan)
         self.session.commit()
         
+        result = self._loan_to_dict(loan)
+        self._log_return("Empréstimo contratado", result)
+        return result
+
+    def _loan_to_dict(self, loan: Loan) -> dict:
+        """O formato de resposta do empréstimo (o mesmo na 1ª vez e no retry).
+
+        No retry, as parcelas saem com o status ATUAL: se alguma já foi
+        paga depois da contratação, ela aparece como paga.
+        """
         return {
             "loan_key": loan.loan_key,
             "requested_amount": loan.requested_amount,
@@ -137,6 +171,17 @@ class LoanController(BaseController):
                 for inst in loan.installments
             ]
         }
+
+    def _is_same_loan(self, existing: Loan, account_key: str, requested_amount: int,
+                      installments_count: int, authenticated_customer_key: str) -> bool:
+        """O empréstimo guardado é o mesmo que este pedido descreve?"""
+        account = existing.account
+        return (
+            account.customer.customer_key.strip() == authenticated_customer_key
+            and account.account_key.strip().lower() == account_key.strip().lower()
+            and existing.requested_amount == requested_amount
+            and len(existing.installments) == installments_count
+        )
 
     def pay_installment(self, loan_key: str, installment_id: int, authenticated_customer_key: str) -> None:
         """Collects money for an installment via debit."""
@@ -190,3 +235,4 @@ class LoanController(BaseController):
             installment.loan.status = "paid"
             
         self.session.commit()
+        self._log_return("Parcela paga")
