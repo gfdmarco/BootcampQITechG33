@@ -49,7 +49,7 @@ class AuthController(BaseController):
             "refresh_token": refresh_token,
             "token_type": "Bearer"
         }
-        self._log_return("Login realizado", result, senha="conferida")
+        self._log_return("Login realizado", result, password="verified")
         return result
 
     def refresh(self, payload: dict) -> dict:
@@ -103,5 +103,5 @@ class AuthController(BaseController):
         # Atualizamos a senha com um novo hash bancário
         customer.password_hash = bcrypt.hash(new_password)
         self.session.commit()
-        self._log_return("Senha alterada", None, senha="alterada")
+        self._log_return("Senha alterada", None, password="changed")
 

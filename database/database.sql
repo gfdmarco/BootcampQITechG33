@@ -275,9 +275,9 @@ CREATE TABLE notification_outbox (
 INSERT INTO customer (customer_key, name, document_number, email, password_hash, birth_date, status_id)
 VALUES (
     '00000000-0000-4000-8000-000000000001',
-    'QI Bank - Tesouraria',
+    'QI Bank - Treasury',
     '000.000.000-00',
-    'tesouraria@banco.interno',
+    'treasury@bank.internal',
     '$2b$12$TZ4/9J0plyFccztP5OeiI.BbEZlCDU.T4ijsmVjaZ1VU.XTLmJefO',
     '2000-01-01',
     (SELECT id FROM customer_status WHERE enumerator = 'success')

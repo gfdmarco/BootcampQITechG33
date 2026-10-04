@@ -30,7 +30,7 @@ class BaseController(metaclass=ABCMeta):
         `data` é o que vai voltar (o DTO); passa por utils/safe_log.sanitize,
         que mascara CPF/CNPJ/e-mail, remove senha e esconde token. `events`
         descreve o que não pode ir no log, só o resultado:
-        `senha="criada"`, `senha="conferida"`.
+        `password="created"`, `password="verified"`.
 
         Mesmo formato do middleware: a linha ganha sozinha o request_id.
         """

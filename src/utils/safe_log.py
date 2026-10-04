@@ -4,14 +4,14 @@ O middleware de log escreve ENTROU e SAIU de toda requisição, mas não
 diz O QUE aconteceu. Os controllers, antes de cada return, chamam
 `BaseController._log_return(...)`, que escreve uma linha como:
 
-    RETORNO Cliente registrado | customer_key=7f3c... document_number=123.***.***-** email=g***@unicamp.br senha=criada
+    RETORNO Cliente registrado | customer_key=7f3c... document_number=123.***.***-** email=g***@unicamp.br password=created
 
 e passa tudo por `sanitize` antes. As regras:
 
   • CPF e CNPJ saem só com os 3 primeiros dígitos; o resto vira "*".
   • E-mail sai com a primeira letra do usuário e o domínio.
   • Senha nunca sai — nem em texto, nem em hash. Quem chama descreve o
-    resultado ("senha=criada", "senha=conferida", "senha=alterada").
+    resultado ("password=created", "password=verified", "password=changed").
   • Tokens (access/refresh) nunca saem: viram "<emitido>".
   • Saldo não sai: vira "<oculto>".
   • Listas não são despejadas no log: sai só a quantidade de itens.

@@ -1,4 +1,5 @@
 """O log de retorno nunca leva dado sensível (src/utils/safe_log.py)."""
+import pytest
 import sys
 from pathlib import Path
 
@@ -46,3 +47,28 @@ def test_query_string_is_masked_for_the_request_log():
 
     line = masked_query(QueryParams("document_number=123.456.789-09&limit=10&email=ana@x.com"))
     assert line == "document_number=123.***.***-**&limit=10&email=a***@x.com"
+
+@pytest.mark.filterwarnings("ignore::sqlalchemy.exc.MovedIn20Warning")
+def test_return_log_reports_the_password_outcome_never_the_password(monkeypatch):
+    """Os controllers registram a senha só pelo resultado: `password=created`."""
+    import constants
+    # importar o controller cria o engine do SQLAlchemy; ele só precisa de uma URL, nada conecta
+    monkeypatch.setattr(constants, "DATABASE_URL", constants.DATABASE_URL or "postgresql://unit:unit@localhost/unit")
+    from controllers.base_controller import BaseController
+
+    lines = []
+
+    class _Capture:
+        def info(self, message):
+            lines.append(message)
+
+    controller = BaseController.__new__(BaseController)   # sem abrir sessão de banco
+    controller.logger = _Capture()
+    controller._log_return(
+        "Cliente registrado",
+        {"customer_key": "k1", "document_number": "123.456.789-09", "password": "Senha123"},
+        password="created",
+    )
+
+    assert lines == ["RETORNO Cliente registrado | customer_key=k1 document_number=123.***.***-** password=created"]
+    assert "Senha123" not in lines[0]
