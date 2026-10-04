@@ -54,8 +54,7 @@ class TransactionDTO:
     def obj_to_simplified_dict(transaction: Transaction) -> dict:
         """A transação sem a trilha de status — o resumo.
 
-        Existe pelo mesmo motivo do resumo em `SampleEntityDTO`: a
-        trilha mora em OUTRA tabela, e montá-la item a item custa uma
+        A trilha mora em OUTRA tabela, e montá-la item a item custa uma
         consulta por transação da página. Quem lista o extrato está
         varrendo; quem abre uma transação está investigando. São dois
         pedidos diferentes, e por isso são dois formatos.
