@@ -1,6 +1,7 @@
 import jwt
 from passlib.hash import bcrypt
 
+from constants import BANK_CUSTOMER_KEY
 from controllers.base_controller import BaseController
 from errors.custom_errors import InvalidCredentials
 from models import CustomerStatus
@@ -33,6 +34,13 @@ class AuthController(BaseController):
         if customer.status.enumerator == CustomerStatus.FAILED:
             raise InvalidCredentials()
 
+        # A tesouraria (cliente "banco") nunca loga — nem com a senha certa.
+        # Segunda trava além da senha desconhecida: se alguém com acesso ao
+        # banco trocar o hash, o login continua fechado. Mesma resposta de
+        # credencial errada, para não revelar que este CPF é especial.
+        if customer.customer_key.strip() == BANK_CUSTOMER_KEY:
+            raise InvalidCredentials()
+
         access_token = create_access_token(customer.customer_key)
         refresh_token = create_refresh_token(customer.customer_key)
 
@@ -59,7 +67,8 @@ class AuthController(BaseController):
         customer_key = token_data.get("sub")
         customer = self.customer_repository.get_by_key(customer_key)
 
-        if customer is None or customer.status.enumerator == CustomerStatus.FAILED:
+        if (customer is None or customer.status.enumerator == CustomerStatus.FAILED
+                or customer.customer_key.strip() == BANK_CUSTOMER_KEY):
             from errors.custom_errors import UnauthorizedToken
             raise UnauthorizedToken("Customer no longer active.")
 

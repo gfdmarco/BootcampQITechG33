@@ -51,6 +51,9 @@ INTERNAL_PREFIX = "/internal/"
 # Conta interna do banco (tesouraria): recebe tarifas e parcelas de
 # empréstimo. Criada pelo database/database.sql com esta chave fixa.
 BANK_ACCOUNT_KEY = "00000000-0000-4000-8000-000000000002"
+# O "cliente" dono da tesouraria (o próprio banco). Nunca loga: além da
+# senha desconhecida, o login recusa esta chave explicitamente.
+BANK_CUSTOMER_KEY = "00000000-0000-4000-8000-000000000001"
 
 WEBHOOK_PREFIX = "/webhook/"
 
