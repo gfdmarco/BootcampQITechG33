@@ -129,3 +129,61 @@ class TestRiskEvaluationState:
             engine.dispose()
 
         assert consumption_count == 2
+
+    def test_reconciliation_expires_stale_reserved_consumption(self):
+        customer_key = str(uuid4())
+        evaluation_key = str(uuid4())
+
+        _set_score(customer_key, "medium", "stale reservation test")
+        result = _evaluate(customer_key, evaluation_key)
+        assert result["action"] == "APPROVE"
+
+        engine, connection = _risk_conn()
+        try:
+            connection.execute(
+                text(
+                    """
+                    UPDATE risk_limit_consumption
+                       SET requested_at = NOW() - INTERVAL '1 hour'
+                     WHERE evaluation_key = :evaluation_key
+                    """
+                ),
+                {"evaluation_key": evaluation_key},
+            )
+            connection.commit()
+        finally:
+            connection.close()
+            engine.dispose()
+
+        response = requests.post(
+            f"{RISK_URL}/reconciliation/limit-reservations",
+            json={"max_age_minutes": 15},
+            headers=RISK_HEADERS,
+            timeout=5,
+        )
+        assert response.status_code == 200, response.text
+        assert response.json()["expired_count"] >= 1
+
+        engine, connection = _risk_conn()
+        try:
+            row = connection.execute(
+                text(
+                    """
+                    SELECT request.status AS request_status,
+                           consumption.status AS consumption_status,
+                           consumption.expired_at
+                      FROM risk_evaluation_request request
+                      JOIN risk_limit_consumption consumption
+                        ON consumption.evaluation_key = request.evaluation_key
+                     WHERE request.evaluation_key = :evaluation_key
+                    """
+                ),
+                {"evaluation_key": evaluation_key},
+            ).mappings().one()
+        finally:
+            connection.close()
+            engine.dispose()
+
+        assert row["request_status"] == "expired"
+        assert row["consumption_status"] == "expired"
+        assert row["expired_at"] is not None

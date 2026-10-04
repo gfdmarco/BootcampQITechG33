@@ -4,7 +4,7 @@ from fastapi.encoders import jsonable_encoder
 from fastapi.responses import JSONResponse
 
 from constants import RISK_INTERNAL_TOKEN
-from controllers import TransactionController
+from controllers import CustomerController, NotificationController, TransactionController
 from errors import ForbiddenAction
 from utils.schema_handler import SchemaHandler
 
@@ -35,5 +35,29 @@ class InternalResource:
 
         return JSONResponse(
             content=jsonable_encoder(history),
+            status_code=http_status.HTTP_200_OK,
+        )
+
+    def on_post_reprocess_notifications(self, request: Request) -> JSONResponse:
+        if request.headers.get("RISK-WORKER-TOKEN") != RISK_INTERNAL_TOKEN:
+            raise ForbiddenAction()
+
+        limit = int(request.query_params.get("limit", 50))
+        result = NotificationController().reprocess_pending_outbox(limit)
+
+        return JSONResponse(
+            content=jsonable_encoder(result),
+            status_code=http_status.HTTP_200_OK,
+        )
+
+    def on_post_cleanup_customer_idempotency(self, request: Request) -> JSONResponse:
+        if request.headers.get("RISK-WORKER-TOKEN") != RISK_INTERNAL_TOKEN:
+            raise ForbiddenAction()
+
+        retention_days = int(request.query_params.get("retention_days", 7))
+        result = CustomerController().cleanup_idempotency_requests(retention_days)
+
+        return JSONResponse(
+            content=jsonable_encoder(result),
             status_code=http_status.HTTP_200_OK,
         )

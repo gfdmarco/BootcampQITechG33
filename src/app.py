@@ -315,6 +315,16 @@ def create_app() -> FastAPI:
         internal_resource.on_get_customer_transactions,
         methods=["GET"],
     )
+    application.add_api_route(
+        "/internal/notifications/reprocess",
+        internal_resource.on_post_reprocess_notifications,
+        methods=["POST"],
+    )
+    application.add_api_route(
+        "/internal/customers/idempotency/cleanup",
+        internal_resource.on_post_cleanup_customer_idempotency,
+        methods=["POST"],
+    )
 
     # ────────────────────────────────────────────────────────────────
     # Rotas de Pessoa Jurídica (Corporate)

@@ -18,6 +18,7 @@ class RiskLimitConsumption(Base):
     requested_at = Column(DateTime, nullable=False, server_default=func.now())
     confirmed_at = Column(DateTime)
     canceled_at = Column(DateTime)
+    expired_at = Column(DateTime)
 
     __table_args__ = (
         UniqueConstraint("consumption_key"),

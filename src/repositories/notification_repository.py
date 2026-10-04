@@ -39,6 +39,15 @@ class NotificationRepository:
     def get_outbox_by_event_key(self, event_key: str) -> NotificationOutbox | None:
         return self.session.query(NotificationOutbox).filter(NotificationOutbox.event_key == event_key).first()
 
+    def list_outbox_for_reprocessing(self, limit: int = 50) -> list[NotificationOutbox]:
+        return (
+            self.session.query(NotificationOutbox)
+            .filter(NotificationOutbox.status.in_(("pending", "failed")))
+            .order_by(NotificationOutbox.created_at.asc(), NotificationOutbox.id.asc())
+            .limit(limit)
+            .all()
+        )
+
     def mark_outbox_processed(self, event: NotificationOutbox) -> None:
         event.status = "processed"
         event.processed_at = func.now()

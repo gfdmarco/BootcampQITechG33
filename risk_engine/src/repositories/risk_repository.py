@@ -167,3 +167,24 @@ class RiskRepository:
             request.transaction_key = transaction_key
 
         return True
+
+    def expire_stale_reservations(self, cutoff: datetime) -> int:
+        consumptions = (
+            self.session.query(RiskLimitConsumption)
+            .filter(
+                RiskLimitConsumption.status == "reserved",
+                RiskLimitConsumption.requested_at < cutoff,
+            )
+            .all()
+        )
+
+        now = datetime.utcnow()
+        for consumption in consumptions:
+            consumption.status = "expired"
+            consumption.expired_at = now
+
+            request = self.get_evaluation_request(consumption.evaluation_key)
+            if request is not None and request.status != "confirmed":
+                request.status = "expired"
+
+        return len(consumptions)

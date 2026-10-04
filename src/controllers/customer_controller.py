@@ -1,4 +1,4 @@
-from datetime import date
+from datetime import date, datetime, timedelta
 import hashlib
 import json
 from passlib.hash import bcrypt
@@ -257,3 +257,9 @@ class CustomerController(BaseController):
     def _payload_hash(self, payload: dict) -> str:
         canonical_payload = json.dumps(payload, sort_keys=True, separators=(",", ":"))
         return hashlib.sha256(canonical_payload.encode("utf-8")).hexdigest()
+
+    def cleanup_idempotency_requests(self, retention_days: int = 7) -> dict:
+        cutoff = datetime.utcnow() - timedelta(days=retention_days)
+        deleted_count = self.customer_repository.delete_idempotency_requests_before(cutoff)
+        self.session.commit()
+        return {"deleted_count": deleted_count, "retention_days": retention_days}

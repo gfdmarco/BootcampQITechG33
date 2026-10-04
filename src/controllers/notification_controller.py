@@ -68,6 +68,25 @@ class NotificationController(BaseController):
         for event_key in event_keys:
             self.process_event_key(event_key)
 
+    def reprocess_pending_outbox(self, limit: int = 50) -> dict:
+        events = self.notification_repository.list_outbox_for_reprocessing(limit)
+        processed_count = 0
+        failed_count = 0
+
+        for event in events:
+            try:
+                self.process_event_key(event.event_key)
+                processed_count = processed_count + 1
+            except Exception:
+                failed_count = failed_count + 1
+
+        self.session.commit()
+        return {
+            "processed_count": processed_count,
+            "failed_count": failed_count,
+            "limit": limit,
+        }
+
     def notify_transfer(self, sender_key: str, receiver_key: str, amount: int, channel: str, transaction_key: str = None) -> None:
         self.publish_event(
             sender_key,

@@ -49,3 +49,11 @@ class RiskResource:
         controller = RiskController(request.state.context)
         profiles   = controller.list_profiles()
         return JSONResponse(status_code=200, content={"profiles": profiles})
+
+    async def on_post_reconcile_reservations(self, request: Request) -> JSONResponse:
+        payload = await request.json()
+        max_age_minutes = int(payload.get("max_age_minutes", 15))
+
+        controller = RiskController(request.state.context)
+        result = controller.reconcile_stale_reservations(max_age_minutes)
+        return JSONResponse(status_code=200, content=result)

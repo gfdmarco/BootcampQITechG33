@@ -5,7 +5,7 @@
 **VERSAO:** 1.0  
 **ESCOPO:** documentacao geral dos modulos trabalhados diretamente: risk management, customer e notification.
 
-Este documento investiga tres modulos do repositorio e organiza as decisoes tecnicas no estilo QI Tech: o que existe, por que foi feito assim, qual risco foi mitigado, qual risco ainda ficou aberto e qual seria o proximo passo natural.
+Este documento investiga tres modulos do repositorio e organiza as decisoes tecnicas no estilo QI Tech: o que existe, por que foi feito assim, qual risco foi mitigado e qual limite operacional ainda deve ser acompanhado pelo time.
 
 O ponto mais importante da conversa com o tech lead e este:
 
@@ -49,9 +49,19 @@ flowchart TD
 
 | Modulo | Fonte de verdade hoje | Tem tabela de estado? | Usa Redis? | Risco principal |
 |---|---|---|---|---|
-| Customer | PostgreSQL Core | Sim, `customer_status`, `customer_status_event` e `customer_idempotency_request` | Nao | Reconciliacao/expurgo futuro das chaves de idempotencia antigas |
-| Notification | PostgreSQL Core | Sim: `notification` e `notification_outbox` com `event_key` unico e status de processamento | Nao no fluxo atual | Falta worker dedicado/reconciliacao para reprocessar outbox pendente |
-| Risk Management | PostgreSQL Risk | Sim: `risk_profile`, `risk_evaluation_event`, `risk_evaluation_request` e `risk_limit_consumption` | Sim, como cache/read model | Reconciliacao futura de reservas que nunca forem confirmadas |
+| Customer | PostgreSQL Core | Sim, `customer_status`, `customer_status_event` e `customer_idempotency_request` | Nao | Fechado para bootcamp: limpeza operacional versionada |
+| Notification | PostgreSQL Core | Sim: `notification` e `notification_outbox` com `event_key` unico e status de processamento | Nao no fluxo atual | Fechado para bootcamp: reprocessamento operacional versionado |
+| Risk Management | PostgreSQL Risk | Sim: `risk_profile`, `risk_evaluation_event`, `risk_evaluation_request` e `risk_limit_consumption` | Sim, como cache/read model | Fechado para bootcamp: reconciliacao operacional versionada |
+
+### Rotina operacional leve
+
+Para nao deixar as rotinas dependentes de memoria em processo ou Redis, os tres modulos expõem rotas internas idempotentes:
+
+- `POST /reconciliation/limit-reservations`, expirando reservas antigas de limite no Risk;
+- `POST /internal/notifications/reprocess`, reprocessando outbox pendente ou falha;
+- `POST /internal/customers/idempotency/cleanup`, removendo chaves antigas de idempotencia.
+
+Para bootcamp/OSS, isso fecha o ciclo sem adicionar infra nova. Em producao, essas mesmas rotas poderiam ser chamadas por cron, Kubernetes CronJob, GitHub Actions agendado ou worker dedicado.
 
 ---
 
@@ -135,6 +145,7 @@ Decisao implementada:
 - o payload e normalizado e hasheado com SHA-256;
 - a resposta 201 fica persistida junto da chave;
 - reuso da chave com payload diferente retorna `QIT001027`.
+- rota interna `POST /internal/customers/idempotency/cleanup?retention_days=...` remove chaves antigas.
 
 ```mermaid
 sequenceDiagram
@@ -275,7 +286,9 @@ Com isso:
 - se der erro, `attempts` e `last_error` contam a historia;
 - Redis pode acelerar, mas nao guarda a unica copia do trabalho.
 
-O passo implementado neste ciclo cria a outbox e processa imediatamente no proprio fluxo da API. O proximo passo, se o time quiser desacoplar de verdade, e criar um worker que busque `pending` com `FOR UPDATE SKIP LOCKED`.
+O passo implementado neste ciclo cria a outbox, processa imediatamente no proprio fluxo da API e tambem permite reprocessamento interno por `POST /internal/notifications/reprocess`.
+
+Para o escopo de bootcamp/OSS, o contrato HTTP interno e suficiente. Em producao, o mesmo contrato poderia ser chamado por um worker dedicado que busque `pending` com `FOR UPDATE SKIP LOCKED`; isso vira evolucao de escala, nao dependencia para preservar o estado.
 
 ---
 
@@ -369,9 +382,9 @@ O limite diario agora e calculado a partir de `risk_limit_consumption`, consider
 
 Redis ainda pode receber incremento para leitura rapida ou metricas, mas a decisao principal de limite nao depende mais de ele manter a unica copia do contador.
 
-**P1 - Falta reconciliacao de reservas antigas**
+**Resolvido - reconciliacao de reservas antigas**
 
-O Core confirma uma avaliacao depois do commit financeiro em `POST /evaluate/{evaluation_key}/confirm`. Se essa chamada pos-commit falhar, o consumo permanece `reserved`. Isso e melhor do que perder a informacao, mas exige uma rotina futura de reconciliacao para expirar ou confirmar reservas antigas.
+O Core confirma uma avaliacao depois do commit financeiro em `POST /evaluate/{evaluation_key}/confirm`. Se essa chamada pos-commit falhar, o consumo permanece `reserved`. Agora o Risk possui `POST /reconciliation/limit-reservations`, que expira reservas `reserved` mais antigas que a janela definida por `max_age_minutes`.
 
 Tabela sugerida:
 
@@ -387,6 +400,7 @@ CREATE TABLE risk_limit_consumption (
     requested_at TIMESTAMP NOT NULL DEFAULT NOW(),
     confirmed_at TIMESTAMP,
     canceled_at TIMESTAMP,
+    expired_at TIMESTAMP,
     UNIQUE(consumption_key),
     UNIQUE(transaction_key)
 );
@@ -513,7 +527,7 @@ Manter fail-fast no caminho de transferencia e nao aprovar por suposicao:
 |---|---|
 | `POST /customers` | Retry apos timeout vira duplicidade, nao replay da resposta original |
 | `POST /transactions` com Risk | Risk `/evaluate` pode consumir limite duas vezes se houver retry |
-| Notification async futuro | Outbox ja persiste o trabalho; falta worker dedicado para reprocessar pendencias |
+| Notification async futuro | Outbox ja persiste o trabalho e a rota interna reprocessa pendencias; worker dedicado fica como evolucao de escala |
 | LLM Worker | Reprocessa perfis por tempo/unknown, mas nao registra tentativa com estado |
 
 ### Padrao recomendado
@@ -585,11 +599,13 @@ flowchart TD
 | P0 | Risk | Modelar e gravar `risk_evaluation_event` | Auditoria real de mudanca de score |
 | P0 | Risk | Criar idempotencia para `/evaluate` | Evita consumo duplicado de limite em retry |
 | P0 | Risk | Persistir consumo de limite diario em tabela | Redis nao pode ser a unica fonte do limite |
-| P1 | Risk | Reconciliar reservas antigas de `risk_limit_consumption` | Evita limite preso quando confirmacao pos-commit falhar |
+| Feito | Risk | Reconciliar reservas antigas de `risk_limit_consumption` | Evita limite preso quando confirmacao pos-commit falhar |
 | Feito | Notification | Criar `event_key` unico em `notification` | Evita notificacao transacional duplicada em retry |
 | Feito | Notification | Criar `notification_outbox` antes de usar Redis/fila | Evita perda de evento apos commit financeiro |
 | Feito | Customer | Remover status `failed` duplicado no delete | Limpa auditoria e evita trilha confusa |
 | Feito | Core/Risk | Formalizar timeout fail closed no `/evaluate` | Risk indisponivel nunca aprova por suposicao |
+| Feito | Customer | Expurgar idempotency keys antigas por rota interna | Evita crescimento indefinido da tabela |
+| Feito | Notification | Reprocessar outbox pendente/falha por rota interna | Permite reconciliacao operacional sem Redis |
 | P2 | Worker | Registrar tentativas de LLM com status | Permite retry, auditoria e investigacao |
 | Feito | Customer | Idempotency-Key em `POST /customers` | Retry seguro quando resposta se perde |
 

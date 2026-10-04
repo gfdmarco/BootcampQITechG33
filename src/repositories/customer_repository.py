@@ -80,6 +80,13 @@ class CustomerRepository:
         self.session.add(request)
         return request
 
+    def delete_idempotency_requests_before(self, cutoff) -> int:
+        return (
+            self.session.query(CustomerIdempotencyRequest)
+            .filter(CustomerIdempotencyRequest.created_at < cutoff)
+            .delete(synchronize_session=False)
+        )
+
     def list_page(self, limit: int, offset: int, filters: dict) -> list[Customer]:
         query = self.session.query(Customer)
 

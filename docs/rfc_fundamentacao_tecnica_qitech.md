@@ -489,7 +489,7 @@ O Redis cumpre um papel principal e um papel auxiliar:
 
 O consumo de limite agora e persistido em `risk_limit_consumption` com status inicial `reserved`, e o Core confirma a avaliacao apos o commit financeiro. Isso resolve o problema de Redis como unica memoria do consumo e torna `/evaluate` idempotente por `evaluation_key`.
 
-O risco residual e operacional: se a confirmacao pos-commit falhar, a reserva fica pendente. O proximo passo e uma reconciliacao periodica que expire reservas antigas ou cruze `transaction_key` com o ledger.
+O risco residual era operacional: se a confirmacao pos-commit falhasse, a reserva ficava pendente. Agora o Risk possui `POST /reconciliation/limit-reservations`, que expira reservas antigas com status `reserved`. Para o escopo de bootcamp/OSS, essa chamada fica exposta como contrato interno versionado na API.
 
 ---
 
@@ -504,9 +504,9 @@ O risco residual e operacional: se a confirmacao pos-commit falhar, a reserva fi
 | Eventos de status | tabelas `*_status_event` | Auditoria e rastreabilidade | Nem todo dominio novo segue o mesmo padrao ainda, ex.: loan usa status textual |
 | Risco como servico separado | `risk_engine/` + compose | Politicas antifraude evoluem sem mexer no core | Dependencia sincrona exige fallback bem definido |
 | Worker LLM assincrono | `risk_engine/worker` | Remove latencia/custo de IA do caminho critico | Score pode ficar defasado ate o proximo ciclo |
-| Redis para cache/read model | `risk_engine/src/connectors/redis_connector.py` | Reduz latencia e carga no Postgres de risco | Consumo verdadeiro fica em `risk_limit_consumption`; reservas antigas ainda precisam reconciliacao |
+| Redis para cache/read model | `risk_engine/src/connectors/redis_connector.py` | Reduz latencia e carga no Postgres de risco | Consumo verdadeiro fica em `risk_limit_consumption`; reconciliacao interna expira reservas antigas |
 | Risk fail closed | `RiskEngineConnector.evaluate_transaction` | Sem resposta confiavel do Risk, transferencia nao aprova por suposicao | Pode aumentar recusas durante indisponibilidade; precisa metrica/alerta |
-| Notificacao via outbox | `NotificationController` grava `notification_outbox` antes do commit e processa apos commit | Comunicacao nao deve quebrar movimento financeiro nem sumir em falha pos-commit | Ainda falta worker dedicado para reprocessar pendencias |
+| Notificacao via outbox | `NotificationController` grava `notification_outbox` antes do commit e processa apos commit | Comunicacao nao deve quebrar movimento financeiro nem sumir em falha pos-commit | Rota interna reprocessa pendencias; worker dedicado fica como evolucao de escala |
 | Conta interna de tesouraria | schema core + `get_bank_account` | Centraliza tarifas e pagamento de parcelas | Conta interna precisa ser tratada como entidade sistemica, nunca login operacional |
 
 ---
@@ -567,11 +567,19 @@ Recomendacao:
 - criar job de reconciliacao de boletos `pending`;
 - ou adotar outbox/estado `registering` com retry idempotente.
 
-### P2 - Notificacao ainda nao tem worker dedicado de reconciliacao
+### P2 - Reconciliacao operacional ficou leve por decisao de escopo
 
 A documentacao e o desenho apontam para notificacao por eventos. Agora o core grava `notification_outbox` antes do commit e processa essa outbox logo depois, marcando o item como `processed`.
 
-Isso resolve a parte mais importante antes de qualquer Redis/fila: o trabalho a processar fica persistido em tabela com `event_key`, status, tentativas e erro. A evolucao natural agora e criar um worker que busque pendencias com lock, reprocesse falhas e permita desacoplar o envio sem perder evento.
+Isso resolve a parte mais importante antes de qualquer Redis/fila: o trabalho a processar fica persistido em tabela com `event_key`, status, tentativas e erro.
+
+Para o escopo de bootcamp/OSS, a reconciliacao ficou exposta por rotas internas:
+
+- Risk: `POST /reconciliation/limit-reservations`;
+- Core: `POST /internal/notifications/reprocess`;
+- Core: `POST /internal/customers/idempotency/cleanup`.
+
+Com isso, os tres modulos trabalhados diretamente possuem contratos operacionais repetiveis. Em ambiente produtivo, a evolucao natural seria executar essas rotas por cron, GitHub Actions, Kubernetes CronJob ou worker dedicado com lock; nao e necessario introduzir essa infraestrutura para demonstrar a decisao tecnica.
 
 ---
 
@@ -582,13 +590,14 @@ Isso resolve a parte mais importante antes de qualquer Redis/fila: o trabalho a 
 | P0 | Corrigir `CorporateAudit` e rodar testes PJ com API ligada | Transferencia PJ auditavel e validada |
 | P0 | Executar suite critica: transacao, boleto, loan, risk e PJ | Evidencia objetiva antes de demo |
 | Feito | Formalizar fail closed no Core -> Risk | Risk indisponivel nunca aprova por suposicao |
-| P1 | Criar reconciliacao de reservas de risco antigas | Sem limite preso quando confirmacao pos-commit falhar |
+| Feito | Criar reconciliacao de reservas de risco antigas | Sem limite preso quando confirmacao pos-commit falhar |
 | P1 | Formalizar titularidade neutra de conta | Evolucao limpa para PF/PJ |
 | P1 | Adicionar status/eventos para loan/installment | Auditoria consistente no dominio de credito |
 | P2 | Criar reconciliacao de boletos pendentes | Menos estados presos por falha externa |
 | Feito | Deduplicar notificacoes transacionais com `event_key` | Retry nao cria notificacao duplicada |
 | Feito | Persistir `notification_outbox` antes de Redis/fila | Evento nao some entre commit financeiro e processamento |
-| P2 | Criar worker de notificacao para processar outbox pendente | Core financeiro menos acoplado |
+| Feito | Criar reprocessamento interno de notification outbox | Outbox pendente/falha pode ser reconciliada |
+| Feito | Criar rotas internas operacionais para Risk, Customer e Notification | Sem pontas soltas para o escopo bootcamp/OSS |
 | P2 | Revisar defaults secretos no compose para perfil nao-local | Evitar vazamento de configuracao insegura |
 
 ---

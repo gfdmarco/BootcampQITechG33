@@ -1,4 +1,5 @@
 import logging
+from datetime import datetime, timedelta
 from uuid import uuid4
 
 from connectors import RedisCacheConnector
@@ -180,3 +181,9 @@ class RiskController:
             raise EvaluationNotFound(evaluation_key)
         self.context.db_session.commit()
         return {"evaluation_key": evaluation_key, "status": "confirmed"}
+
+    def reconcile_stale_reservations(self, max_age_minutes: int = 15) -> dict:
+        cutoff = datetime.utcnow() - timedelta(minutes=max_age_minutes)
+        expired_count = self.repository.expire_stale_reservations(cutoff)
+        self.context.db_session.commit()
+        return {"expired_count": expired_count, "max_age_minutes": max_age_minutes}

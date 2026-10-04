@@ -64,6 +64,7 @@ CREATE TABLE risk_limit_consumption (
     requested_at        TIMESTAMP NOT NULL DEFAULT NOW(),
     confirmed_at        TIMESTAMP,
     canceled_at         TIMESTAMP,
+    expired_at          TIMESTAMP,
     UNIQUE(consumption_key),
     UNIQUE(evaluation_key)
 );
