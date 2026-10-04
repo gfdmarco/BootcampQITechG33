@@ -60,10 +60,6 @@ CREATE TABLE account (
     status_id   INTEGER NOT NULL REFERENCES account_status(id),
     created_at  TIMESTAMP NOT NULL DEFAULT NOW(),
     updated_at  TIMESTAMP NOT NULL DEFAULT NOW(),
-    -- Chave de idempotência enviada pelo cliente no header Idempotency-Key
-    -- (NULL para contas abertas por dentro do sistema, como a conta PJ).
-    -- O UNIQUE é a garantia final: duas aberturas com a mesma chave nunca
-    -- viram duas contas, mesmo que a checagem do controller seja furada.
     idempotency_key VARCHAR(120),
     UNIQUE(account_key), UNIQUE(branch, number), UNIQUE(idempotency_key),
     CHECK (balance >= 0)
@@ -108,9 +104,6 @@ CREATE TABLE transaction (
     status_id               INTEGER NOT NULL REFERENCES transaction_status(id),
     created_at              TIMESTAMP NOT NULL DEFAULT NOW(),
     updated_at              TIMESTAMP NOT NULL DEFAULT NOW(),
-    -- Chave de idempotência do POST /transactions (header Idempotency-Key,
-    -- gerada pelo cliente). NULL nas transações internas (boleto pago,
-    -- empréstimo, parcela, transferência PJ aprovada).
     idempotency_key         VARCHAR(120),
     UNIQUE(transaction_key), UNIQUE(idempotency_key),
     CHECK (type <> 'transfer' OR origin_account_id IS NOT NULL)
@@ -228,8 +221,6 @@ CREATE TABLE loan (
     interest_rate       INTEGER NOT NULL,
     status              VARCHAR(20) NOT NULL DEFAULT 'active',
     created_at          TIMESTAMP NOT NULL DEFAULT NOW(),
-    -- Chave de idempotência do POST /loans (header Idempotency-Key, gerada
-    -- pelo cliente): repetir a contratação devolve o mesmo empréstimo.
     idempotency_key     VARCHAR(120),
     UNIQUE(loan_key), UNIQUE(idempotency_key)
 );
