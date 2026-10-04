@@ -3,6 +3,7 @@ from datetime import date
 from controllers.base_controller import BaseController
 from dtos import AccountDTO, TransactionDTO
 from errors import (
+    InvalidIdempotencyKey,
     DuplicatedDocumentNumber,
     DuplicatedEmail,
     InvalidDate,
@@ -19,6 +20,7 @@ from errors import (
 )
 from models import Account, AccountStatus, Customer, CustomerStatus
 from repositories import AccountRepository, TransactionRepository, CustomerRepository
+from utils.idempotency import lock_idempotency_key
 
 MAX_ACCOUNTS_PER_CUSTOMER = 5
 
@@ -49,9 +51,32 @@ class AccountController(BaseController):
 
         return account
 
-    def open_account(self, customer_id: int, account_data: dict) -> dict:
+    def open_account(self, customer_id: int, account_data: dict, idempotency_key: str = None) -> dict:
+        """Abre a conta. Idempotente quando vem `idempotency_key`.
+
+        A chave vem do cliente (header Idempotency-Key, obrigatório em
+        POST /customers/{key}/accounts). Não dá para derivar de agência e
+        número: o número é sorteado a cada pedido, então um retry sortearia
+        outro número, outra chave — e abriria uma segunda conta.
+
+        Contas abertas por dentro do sistema (conta PJ) chegam sem chave.
+        """
         branch = account_data["branch"]
         number = account_data["number"]
+
+        if idempotency_key is not None:
+            lock_idempotency_key(self.session, "account", idempotency_key)
+
+            existing = self.account_repository.get_by_idempotency_key(idempotency_key)
+            if existing is not None:
+                # Mesma chave, mesmo dono e mesmo tipo: é a repetição do
+                # pedido. Devolve a conta da primeira vez, sem abrir outra
+                # e sem contar de novo no limite de 5 contas.
+                if existing.customer_id != customer_id or existing.type != account_data["type"]:
+                    raise InvalidIdempotencyKey()
+                existing_dto = AccountDTO.obj_to_dict(existing)
+                self._log_return("Abertura de conta repetida: devolvendo a original", existing_dto)
+                return existing_dto
 
         accounts_count = self.account_repository.count_active_by_customer(customer_id)
         if accounts_count >= MAX_ACCOUNTS_PER_CUSTOMER:
@@ -61,6 +86,7 @@ class AccountController(BaseController):
             raise DuplicatedAccount(branch, number)
 
         account_data["customer_id"] = customer_id
+        account_data["idempotency_key"] = idempotency_key
         account = self.account_repository.create(account_data)
         self.account_repository.update_status(account, AccountStatus.ACTIVE)
 
@@ -68,15 +94,20 @@ class AccountController(BaseController):
         account_dto = AccountDTO.obj_to_dict(account)
 
         self.session.commit()
+        self._log_return("Conta aberta", account_dto)
         return account_dto
 
     def get_balance(self, account_key: str, caller_customer_key: str) -> int:
         account = self.get_account_aux(account_key, caller_customer_key)
-        return account.balance
+        result = account.balance
+        self._log_return("Saldo consultado", {"account_key": account_key})   # o valor do saldo não vai para o log
+        return result
 
     def get_by_key(self, account_key: str, caller_customer_key: str) -> dict:
         account = self.get_account_aux(account_key, caller_customer_key)
-        return AccountDTO.obj_to_dict(account)
+        result = AccountDTO.obj_to_dict(account)
+        self._log_return("Conta consultada", result)
+        return result
 
     def update_status(self, account_key: str, new_status: str, caller_customer_key: str) -> dict:
         account = self.get_account_aux(account_key, caller_customer_key)
@@ -118,7 +149,9 @@ class AccountController(BaseController):
                 except Exception:
                     pass
 
-        return account_dto
+        result = account_dto
+        self._log_return("Status da conta alterado", result)
+        return result
 
     def _parseDate(self, rawDate: str) -> date:
         """Converte a data, ou recusa com 422 em vez de 500.
@@ -162,10 +195,12 @@ class AccountController(BaseController):
             is_last_page = False
             account_list = account_list[:-1]
 
-        return {
+        result = {
             "account_list_dto": AccountDTO.list_obj_to_list_dict(account_list),
             "is_last_page": is_last_page,
         }
+        self._log_return("Lista de contas retornada", result)
+        return result
 
     def get_statement(self, account_key: str, caller_customer_key: str, limit: int, offset: int, filters: dict) -> dict:
         account = self.get_account_aux(account_key, caller_customer_key)
@@ -197,7 +232,9 @@ class AccountController(BaseController):
             is_last_page = False
             transaction_list = transaction_list[:-1]
 
-        return {
+        result = {
             "transaction_list_dto": TransactionDTO.list_obj_to_list_dict(transaction_list),
             "is_last_page": is_last_page,
         }
+        self._log_return("Extrato retornado", result)
+        return result

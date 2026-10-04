@@ -136,6 +136,22 @@ class InvalidIdempotencyKey(QIException):
         translation = "A chave de idempotência já foi usada com outro corpo de requisição."
         super().__init__(title, self.code, http_status, description, translation)
 
+class MissingIdempotencyKey(QIException):
+    """O pedido que move dinheiro ou cria recurso chegou sem a chave.
+
+    Em POST /transactions e POST /customers/{key}/accounts o header
+    Idempotency-Key é obrigatório e precisa ser um UUID: é ele que deixa
+    o cliente repetir o pedido depois de um timeout sem medo de duplicar.
+    """
+    code = "QIT001028"
+
+    def __init__(self) -> None:
+        title = "Missing Idempotency Key"
+        http_status = 400
+        description = "The Idempotency-Key header is required and must be a UUID."
+        translation = "O cabeçalho Idempotency-Key é obrigatório e precisa ser um UUID."
+        super().__init__(title, self.code, http_status, description, translation)
+
 class DuplicatedAccount(QIException):
     code = "QIT001010"
 

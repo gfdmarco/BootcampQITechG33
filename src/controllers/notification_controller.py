@@ -158,7 +158,7 @@ class NotificationController(BaseController):
 
     def list_for_customer(self, customer_key: str) -> dict:
         rows = self.notification_repository.list_by_customer(customer_key)
-        return {
+        result = {
             "notifications": [
                 {
                     "key": r.key.strip(),
@@ -172,6 +172,8 @@ class NotificationController(BaseController):
             "total": len(rows),
             "unread_count": sum(1 for r in rows if not r.is_read),
         }
+        self._log_return("Notificações retornadas", result)
+        return result
 
     def mark_read(self, key: str, customer_key: str) -> dict:
         notification = self.notification_repository.get_by_key(key)
@@ -182,4 +184,6 @@ class NotificationController(BaseController):
         self.notification_repository.mark_read(notification)
         self.session.flush()
         self.session.commit()
-        return {"key": notification.key.strip(), "is_read": True}
+        result = {"key": notification.key.strip(), "is_read": True}
+        self._log_return("Notificação marcada como lida", result)
+        return result

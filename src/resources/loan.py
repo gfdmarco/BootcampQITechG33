@@ -5,6 +5,7 @@ from fastapi.responses import JSONResponse
 from fastapi import Request, Response
 
 from controllers.loan_controller import LoanController
+from utils.idempotency import read_idempotency_key
 from utils.schema_handler import SchemaHandler
 
 class LoanResource:
@@ -32,11 +33,14 @@ class LoanResource:
         controller = LoanController()
         authenticated_customer_key = request.state.customer_key
 
+        idempotency_key = read_idempotency_key(request)   # header obrigatório (UUID)
+
         loan = controller.create_loan(
             account_key=payload["account_key"],
             requested_amount=payload["requested_amount"],
             installments_count=payload["installments_count"],
-            authenticated_customer_key=authenticated_customer_key
+            authenticated_customer_key=authenticated_customer_key,
+            idempotency_key=idempotency_key,
         )
 
         return JSONResponse(

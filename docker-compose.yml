@@ -42,6 +42,8 @@ services:
       BANKSLIP_API_URL: ${BANKSLIP_API_URL:-http://bankslip-mock:8080}
       BANKSLIP_API_INTERNAL_TOKEN: ${BANKSLIP_API_INTERNAL_TOKEN:-default_token}
       BANKSLIP_API_TIMEOUT: ${BANKSLIP_API_TIMEOUT:-5}
+      # Segredo do webhook de boleto pago: só o provedor conhece.
+      BANKSLIP_WEBHOOK_TOKEN: ${BANKSLIP_WEBHOOK_TOKEN:-bankslip_webhook_token}
       RISK_ENGINE_URL: ${RISK_ENGINE_URL:-http://risk_engine:3000}
       RISK_INTERNAL_TOKEN: ${RISK_INTERNAL_TOKEN:-risk_default_token}
       REDIS_URL: ${REDIS_URL:-redis://redis:6379/0}
@@ -51,7 +53,10 @@ services:
       # a API recarrega sozinha (o --reload ali embaixo).
       - ./src:/app
     # --reload: salvou o arquivo, a API reinicia sozinha.
-    command: uvicorn app:app --host 0.0.0.0 --port 3000 --no-server-header --reload
+    # --no-access-log: o log de acesso do uvicorn repete o ENTROU/SAIU do
+    # nosso middleware, mas imprime a query string crua (com CPF). O nosso
+    # mascara; o dele não.
+    command: uvicorn app:app --host 0.0.0.0 --port 3000 --no-server-header --reload --no-access-log
     healthcheck:
       # "Subiu" nao e a mesma coisa que "ja responde". E esta checagem
       # que diz quando a API passa a atender de verdade — espere ela

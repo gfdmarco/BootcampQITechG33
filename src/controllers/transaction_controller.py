@@ -2,6 +2,7 @@ from controllers.base_controller import BaseController
 from dtos import TransactionDTO
 from connectors.risk_engine_connector import RiskEngineConnector
 from errors import (
+    InvalidIdempotencyKey,
     ForbiddenAction,
     InsufficientBalance,
     InvalidParameter,
@@ -22,6 +23,7 @@ from repositories import (
 from datetime import datetime, timedelta
 from constants import BANK_ACCOUNT_KEY
 from utils.clock import business_now
+from utils.idempotency import lock_idempotency_key
 from uuid import uuid4
 
 
@@ -44,7 +46,7 @@ class TransactionController(BaseController):
         self.customer_repository = CustomerRepository(self.context)
         self.risk_connector = RiskEngineConnector()
 
-    def process_transaction(self, payload: dict, authenticated_customer_key: str) -> dict:
+    def process_transaction(self, payload: dict, authenticated_customer_key: str, idempotency_key: str = None) -> dict:
         """
         Confere quem está pedindo, avalia as regras e só então mexe em saldo.
 
@@ -74,7 +76,26 @@ class TransactionController(BaseController):
         
         if caller_customer.status.enumerator == CustomerStatus.FAILED:
             raise ForbiddenAction()
-        
+
+        # ── Idempotência (header Idempotency-Key, gerado pelo cliente) ──
+        # Transferência não tem dado único: duas de R$ 10 para a mesma
+        # conta podem ser legítimas. Só quem chama sabe se é um retry —
+        # por isso a chave vem dele. Chamadas internas (aprovação PJ)
+        # chegam sem chave e seguem o caminho de sempre.
+        if idempotency_key is not None:
+            lock_idempotency_key(self.session, "transaction", idempotency_key)
+
+            existing = self.transaction_repository.get_by_idempotency_key(idempotency_key)
+            if existing is not None:
+                # Mesma chave e mesmo pedido: já fiz — devolvo o resultado
+                # da primeira vez, sem debitar de novo. Mesma chave com
+                # outro pedido (ou de outro cliente): 409.
+                if not self._is_same_transaction(existing, payload, caller_customer.id):
+                    raise InvalidIdempotencyKey()
+                existing_dto = TransactionDTO.only_obj_key(existing)
+                self._log_return("Transação repetida: devolvendo a original", existing_dto)
+                return existing_dto
+
         # Busca pela chave pública — o controller nunca enxerga o `id`.
         destination_account = self.account_repository.get_by_key(destination_account_key)
         if destination_account is None:
@@ -162,6 +183,7 @@ class TransactionController(BaseController):
             "fee": fee_obj,
             "type": transaction_type,
             "channel": payload["channel"],
+            "idempotency_key": idempotency_key,
         }
 
         transaction = self.transaction_repository.create_transaction(transaction_data)
@@ -220,7 +242,29 @@ class TransactionController(BaseController):
             except Exception:
                 pass
 
-        return transaction_dto
+        result = transaction_dto
+        self._log_return("Transação efetivada", result)
+        return result
+
+    def _is_same_transaction(self, existing, payload: dict, caller_customer_id: int) -> bool:
+        """A transação guardada é a mesma que este pedido descreve?"""
+        destination = existing.destination_account
+        origin = existing.origin_account
+        owner_id = origin.customer_id if origin is not None else destination.customer_id
+        def same_key(stored, sent) -> bool:
+            return (stored or "").strip().lower() == (sent or "").strip().lower()
+
+        same_origin = existing.type == "deposit" or same_key(
+            origin.account_key if origin is not None else None, payload.get("origin_account_key")
+        )
+        return (
+            owner_id == caller_customer_id
+            and existing.type == payload.get("type")
+            and existing.channel == payload.get("channel")
+            and existing.amount == payload.get("amount")
+            and same_key(destination.account_key, payload.get("destination_account_key"))
+            and same_origin
+        )
 
     def get_by_key(self, transaction_key: str, authenticated_customer_key: str) -> dict:
         self.logger.debug(f"Buscando a transação de chave {transaction_key}")
@@ -242,7 +286,9 @@ class TransactionController(BaseController):
             raise ForbiddenAction()
 
         # O Controller entrega um dicionário pronto para a Rota.
-        return TransactionDTO.obj_to_dict(transaction)
+        result = TransactionDTO.obj_to_dict(transaction)
+        self._log_return("Transação consultada", result)
+        return result
 
     def get_list(self, limit: int, offset: int, filters: dict, authenticated_customer_key: str) -> dict:
         """A página pedida, depois de conferir se o pedido faz sentido.
@@ -278,10 +324,12 @@ class TransactionController(BaseController):
             is_last_page = False
             transactions_list = transactions_list[:-1]
 
-        return {
+        result = {
             "transactions_list": TransactionDTO.list_obj_to_list_dict(transactions_list),
             "is_last_page": is_last_page,
         }
+        self._log_return("Lista de transações retornada", result)
+        return result
 
     def update_status(self, transaction_key: str, new_status_enumerator: str, reason: str = None) -> dict:
         """Permite que serviços internos mudem o estado (ex.: pending para confirmed)."""
@@ -297,7 +345,9 @@ class TransactionController(BaseController):
         transaction_dto = TransactionDTO.only_obj_key(transaction)
         self.session.commit()
 
-        return transaction_dto
+        result = transaction_dto
+        self._log_return("Status da transação alterado", result)
+        return result
 
     def _check_status_can_change(self, transaction: Transaction, new_status: str) -> None:
         old_status = transaction.status.enumerator
@@ -315,8 +365,10 @@ class TransactionController(BaseController):
         since = business_now() - timedelta(days=days)
         transactions = self.transaction_repository.list_recent_by_customer(customer.id, since, limit)
 
-        return {
+        result = {
             "customer_key": customer_key,
             "days": days,
             "transactions": [TransactionDTO.obj_to_dict(t) for t in transactions],
         }
+        self._log_return("Histórico enviado ao Motor de Risco", result)
+        return result

@@ -27,6 +27,12 @@ BANKSLIP_API_INTERNAL_TOKEN = os.environ.get("BANKSLIP_API_INTERNAL_TOKEN", "def
 # src/connectors/rest_connector.py.
 BANKSLIP_API_TIMEOUT = int(os.environ.get("BANKSLIP_API_TIMEOUT", "5"))
 
+# O segredo que SÓ o provedor de boletos conhece. Ele manda no header
+# BANKSLIP-WEBHOOK-TOKEN quando avisa que um boleto foi pago. O
+# INTERNAL-TOKEN não basta para isso: todo app cliente também manda ele,
+# e com ele qualquer cliente marcaria o próprio boleto como pago sem pagar.
+BANKSLIP_WEBHOOK_TOKEN = os.environ.get("BANKSLIP_WEBHOOK_TOKEN", "bankslip_webhook_token")
+
 RISK_ENGINE_URL = os.environ.get("RISK_ENGINE_URL", "http://risk_engine:3000")
 RISK_INTERNAL_TOKEN = os.environ.get("RISK_INTERNAL_TOKEN", "risk_default_token")
 RISK_ENGINE_TIMEOUT = int(os.environ.get("RISK_ENGINE_TIMEOUT", "3"))

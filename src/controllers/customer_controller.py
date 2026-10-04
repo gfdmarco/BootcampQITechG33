@@ -14,7 +14,6 @@ from errors import (
     UnderageCustomer,
     NotFoundCustomer,
     ForbiddenAction,
-    InvalidIdempotencyKey,
     AccountNumberGenerationFailed,
     AccountInvalidStatusTransition,
     CustomerHasBalance
@@ -25,6 +24,7 @@ from repositories import AccountRepository
 from utils.document_number import is_valid_cpf
 from utils.account_number import generate_account_number
 from utils.clock import business_today
+from utils.idempotency import customer_idempotency_key, lock_idempotency_key
 
 MINIMUM_AGE = 18
 
@@ -37,18 +37,28 @@ class CustomerController(BaseController):
         self.customer_repository = CustomerRepository(self.context)
         self.account_repository = AccountRepository(self.context)
 
-    def create(self, customer_data: dict, idempotency_key: str = None) -> dict:
+    def create(self, customer_data: dict) -> dict:
+        """Cadastra o cliente — idempotente pelo CPF.
+
+        A chave de idempotência NÃO vem do cliente: o servidor a deriva do
+        CPF (SHA-256, ver utils/idempotency.py). Repetir o mesmo cadastro
+        depois de um timeout devolve o cliente criado na primeira vez, com
+        a mesma customer_key. Mesmo CPF com outros dados (ou de um cliente
+        já encerrado) é outro pedido: 409 QIT001004, CPF já cadastrado.
+        """
         self.logger.debug("Criando um novo Customer")
-        request_hash = self._payload_hash(customer_data)
-
-        if idempotency_key:
-            previous = self.customer_repository.get_idempotency_request(idempotency_key)
-            if previous is not None:
-                if previous.request_hash != request_hash:
-                    raise InvalidIdempotencyKey()
-                return previous.response_body
-
         document_number = customer_data["document_number"]
+
+        idempotency_key = customer_idempotency_key(document_number)
+        lock_idempotency_key(self.session, "customer", idempotency_key)
+
+        existing = self.customer_repository.get_idempotency_request(idempotency_key)
+        if existing is not None:
+            if not self._is_same_registration(existing, customer_data):
+                raise DuplicatedDocumentNumber(document_number)
+            self._log_return("Cadastro de cliente repetido: devolvendo o original", existing.response_body)
+            return existing.response_body
+
         email = customer_data["email"]
         birthdate = self._parse_birthdate(customer_data["birthdate"])
         age = self._age_in_years(birthdate)
@@ -82,20 +92,35 @@ class CustomerController(BaseController):
         self.session.flush()
         customer_dto = CustomerDTO.obj_to_dict(customer)
 
-        if idempotency_key:
-            self.customer_repository.create_idempotency_request(
-                idempotency_key=idempotency_key,
-                customer_id=customer.id,
-                request_hash=request_hash,
-                response_status=201,
-                response_body=customer_dto,
-            )
+        self.customer_repository.create_idempotency_request(
+            idempotency_key=idempotency_key,
+            customer_id=customer.id,
+            request_hash=self._payload_hash(customer_data),
+            response_status=201,
+            response_body=customer_dto,
+        )
 
         self.session.commit()
 
+        self._log_return("Cliente registrado", customer_dto, senha="criada")
         return customer_dto
 
-    def open_account(self, customer_key: str, account_data: dict, token_customer_key: str) -> dict:
+    def _is_same_registration(self, existing, customer_data: dict) -> bool:
+        """O pedido que chegou é a repetição do cadastro guardado?
+
+        Compara os dados sem a senha (hash do corpo) e confere a senha
+        contra o bcrypt do cliente — a senha nunca entra no hash guardado.
+        Cliente já encerrado não é "repetição": o CPF fica preso por
+        compliance e o cadastro novo é recusado.
+        """
+        customer = existing.customer
+        if customer is None or customer.status.enumerator == CustomerStatus.FAILED:
+            return False
+        if existing.request_hash != self._payload_hash(customer_data):
+            return False
+        return bcrypt.verify(customer_data["password"], customer.password_hash)
+
+    def open_account(self, customer_key: str, account_data: dict, token_customer_key: str, idempotency_key: str = None) -> dict:
         """Orquestra a abertura de conta.
 
         Validações de DOMÍNIO do customer ficam aqui:
@@ -127,7 +152,7 @@ class CustomerController(BaseController):
         # Delega para o AccountController — ele valida limite e duplicidade
         from controllers.account_controller import AccountController
         account_controller = AccountController()
-        return account_controller.open_account(customer.id, account_data)
+        return account_controller.open_account(customer.id, account_data, idempotency_key=idempotency_key)
 
     def get_by_key(self, customer_key: str, caller_customer_key: str) -> dict:
         if customer_key != caller_customer_key:
@@ -140,7 +165,9 @@ class CustomerController(BaseController):
         if customer is None:
             raise NotFoundCustomer(customer_key)
 
-        return CustomerDTO.obj_to_dict(customer)
+        result = CustomerDTO.obj_to_dict(customer)
+        self._log_return("Cliente consultado", result)
+        return result
 
     def get_list(self, caller_customer_key: str, limit: int, offset: int, filters: dict) -> dict:
         caller_customer = self.customer_repository.get_by_key(caller_customer_key)
@@ -158,10 +185,12 @@ class CustomerController(BaseController):
         if not is_last_page:
             customers.pop()
 
-        return {
+        result = {
             "customers_list_dto": CustomerDTO.list_obj_to_list_dict(customers),
             "is_last_page": is_last_page
         }
+        self._log_return("Lista de clientes retornada", result)
+        return result
 
     def update(self, customer_key: str, payload: dict, token_customer_key: str) -> dict:
         self.logger.debug(f"Atualizando o customer de chave {customer_key}")
@@ -187,7 +216,9 @@ class CustomerController(BaseController):
             customer.email = new_email
 
         self.session.commit()
-        return CustomerDTO.obj_to_dict(customer)
+        result = CustomerDTO.obj_to_dict(customer)
+        self._log_return("Cliente atualizado", result)
+        return result
 
     def delete(self, customer_key: str, token_customer_key: str) -> None:
         self.logger.debug(f"Encerrando (Deleção Lógica) o customer de chave {customer_key}")
@@ -229,6 +260,7 @@ class CustomerController(BaseController):
         customer.password_hash = bcrypt.hash(secrets.token_hex(16))
 
         self.session.commit()
+        self._log_return("Cliente encerrado", None, senha="invalidada")
 
     def _parse_birthdate(self, raw_birthdate: str) -> date:
         """Converte a data, ou recusa com 422 em vez de 500.
@@ -255,7 +287,13 @@ class CustomerController(BaseController):
         return age
 
     def _payload_hash(self, payload: dict) -> str:
-        canonical_payload = json.dumps(payload, sort_keys=True, separators=(",", ":"))
+        """SHA-256 do corpo do cadastro, SEM a senha.
+
+        Um SHA-256 da senha (sem sal) guardado no banco seria quebrável por
+        força bruta; a senha é conferida pelo bcrypt em _is_same_registration.
+        """
+        without_password = {k: v for k, v in payload.items() if k != "password"}
+        canonical_payload = json.dumps(without_password, sort_keys=True, separators=(",", ":"))
         return hashlib.sha256(canonical_payload.encode("utf-8")).hexdigest()
 
     def cleanup_idempotency_requests(self, retention_days: int = 7) -> dict:

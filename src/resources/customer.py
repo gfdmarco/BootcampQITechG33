@@ -3,6 +3,7 @@ from fastapi.encoders import jsonable_encoder
 from fastapi.responses import JSONResponse
 
 from controllers import CustomerController
+from utils.idempotency import read_idempotency_key
 from utils.schema_handler import SchemaHandler
 
 
@@ -10,7 +11,9 @@ class CustomerResource:
     @SchemaHandler.validate("post_customer.json")
     def on_post(self, payload: dict, request: Request) -> JSONResponse:
         controller = CustomerController()
-        customer = controller.create(payload, request.headers.get("Idempotency-Key"))
+        # A chave de idempotência do cadastro é derivada do CPF no controller;
+        # o cliente não precisa (nem consegue) escolher uma.
+        customer = controller.create(payload)
 
         return JSONResponse(
             content=jsonable_encoder(customer),
@@ -82,7 +85,9 @@ class CustomerResource:
         controller = CustomerController() 
         token_customer_key = request.state.customer_key
 
-        account = controller.open_account(customer_key, payload, token_customer_key)
+        idempotency_key = read_idempotency_key(request)   # header obrigatório (UUID)
+
+        account = controller.open_account(customer_key, payload, token_customer_key, idempotency_key)
 
         return JSONResponse(
                 content=jsonable_encoder(account),

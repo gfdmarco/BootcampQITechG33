@@ -4,6 +4,7 @@ from fastapi import FastAPI, Request
 
 from constants import BYPASS_ENDPOINTS
 from utils.logger import get_logger
+from utils.safe_log import masked_query
 
 
 logger = get_logger(__name__)
@@ -47,7 +48,7 @@ def register_request_logger_middleware(application: FastAPI) -> None:
         # do caminho. Segredo viaja em cabeçalho, como o INTERNAL-TOKEN.
         requested_path = request.url.path
         if request.url.query:
-            requested_path = f"{requested_path}?{request.url.query}"
+            requested_path = f"{requested_path}?{masked_query(request.query_params)}"
 
         started_at = time.perf_counter()
         logger.info(f"ENTROU {request.method} {requested_path}")

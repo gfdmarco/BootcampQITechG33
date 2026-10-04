@@ -4,6 +4,7 @@ from fastapi.encoders import jsonable_encoder
 from fastapi.responses import JSONResponse
 
 from controllers import TransactionController
+from utils.idempotency import read_idempotency_key
 from utils.schema_handler import SchemaHandler
 
 DEFAULT_LIMIT = 10
@@ -43,7 +44,9 @@ class TransactionResource:
         controller = TransactionController()
         authenticated_customer_key = request.state.customer_key  # populado pelo middleware de auth
 
-        transaction = controller.process_transaction(payload, authenticated_customer_key)
+        idempotency_key = read_idempotency_key(request)   # header obrigatório (UUID)
+
+        transaction = controller.process_transaction(payload, authenticated_customer_key, idempotency_key)
 
         return JSONResponse(
             content=jsonable_encoder(transaction),
