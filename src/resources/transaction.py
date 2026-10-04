@@ -14,19 +14,18 @@ DEFAULT_PAGE = 0
 class TransactionResource:
     """A porta de entrada HTTP da Transação.
 
-    Segue o mesmo desenho do `SampleEntityResource`: confere o corpo
+    Segue o mesmo desenho dos outros resources: confere o corpo
     via schema, chama o controller, devolve o que ele respondeu. Nenhum
     `self.alguma_coisa`, nenhum SQL, nenhuma regra de negócio aqui.
 
     ────────────────────────────────────────────────────────────────
-    A DIFERENÇA PARA O SAMPLE: QUEM ESTÁ PEDINDO
+    QUEM ESTÁ PEDINDO
     ────────────────────────────────────────────────────────────────
-    A Sample Entity não pertence a ninguém, então o controller dela
-    não pede `authenticated_customer_key`. Uma transação pertence a um
+    Uma transação pertence a um
     cliente, e quase todo método de `TransactionController` exige essa
     chave para decidir o que o pedido pode ver ou fazer.
 
-    Por isso, diferente do sample, estes métodos recebem `Request`: é
+    Por isso estes métodos recebem `Request`: é
     de lá que sai `request.state.customer_key`, o valor que o
     middleware de autenticação (Tarefa 4 do backlog) deve deixar
     pronto depois de validar o token. Enquanto esse middleware não
@@ -88,7 +87,7 @@ class TransactionResource:
 
         # A paginação é assunto do endereço (?limit=&page=), não da
         # transação: por isso quem monta o envelope da página é o
-        # resource, e não o DTO — mesma exceção documentada no sample.
+        # resource, e não o DTO.
         page_envelope = {
             "data": transactions_page["transactions_list"],
             "limit": limit,

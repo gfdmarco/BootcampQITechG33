@@ -2,7 +2,7 @@
 
 | | |
 |---|---|
-| **TIME** | Gabriel de Marco · Lucas Rodrigues Hirashima · João Gabriel Mantagute |
+| **TIME** | Gabriel Farias De Marco · Lucas Rodrigues Hirashima · João Gabriel Iuzviak Mantagute |
 | **DATA** | 04/10/2026 |
 | **VERSÃO** | 2: inclui boleto, empréstimo, PJ, Motor de Risco, tesouraria e idempotência ponta a ponta (a v1, de 26/09, cobria só cadastro, conta, transferência e extrato) |
 
@@ -121,7 +121,7 @@ A identidade do cliente vem só do JWT, e as chamadas de máquina usam `INTERNAL
 | GET | `/customers` · `/customers/{key}` | Lista e consulta, só o próprio cliente | `limit`, `page` | 200; 403 outro cliente; 404 |
 | PATCH | `/customers/{key}` | Altera nome e e-mail | `name`, `email` | 200; 403; 404; 409 `QIT001005` |
 | DELETE | `/customers/{key}` | Encerramento lógico: fecha as contas, anonimiza nome e e-mail, invalida a senha e mantém o CPF. Encerrar de novo não muda nada | — | 204; 403; 404; 409 `QIT001023` há saldo |
-| POST | `/auth/login` | Emite access (15 min) e refresh (7 dias) | `document_number`, `password` | 200; 401 `QIT002001`, com a mesma resposta e o mesmo tempo para CPF inexistente e senha errada |
+| POST | `/auth/login` | Emite access (15 min) e refresh (7 dias). A tesouraria nunca loga, nem com a senha certa | `document_number`, `password` | 200; 401 `QIT002001`, com a mesma resposta e o mesmo tempo para CPF inexistente, senha errada e tesouraria |
 | POST | `/auth/refresh` · PUT `/auth/password` | Renova o access token · troca a senha | `refresh_token` · `current_password`, `new_password` | 200; 401 `QIT002002` token inválido · `QIT002001` senha atual errada |
 | POST | `/customers/{key}/accounts` | Abre conta (agência 0001, número sorteado). **Idempotente pelo header `Idempotency-Key`**: a mesma chave devolve a mesma conta | `type` (checking/savings), header `Idempotency-Key` (UUID) | 201 (ou a conta original); 400 `QIT001028` sem chave ou chave fora do formato UUID; 403 outro cliente ou cliente encerrado; 404; 409 `QIT001027` chave reusada com outro tipo ou por outro cliente; 422 `QIT001013` já tem 5 contas ativas ou bloqueadas (as contas PJ abertas pela pessoa entram na conta) |
 | GET | `/accounts` · `/accounts/{key}` · `/{key}/balance` | Contas do cliente · detalhe · saldo | filtros, `limit`, `page` | 200; 403 conta alheia; 404 |
@@ -281,7 +281,7 @@ erDiagram
 </div>
 </div>
 
-<p class="caption">Diagramas 1 a 3: Core. Diagrama 4: banco próprio do Motor de Risco e outbox de notificações (que mora no Core). Todo id interno é <code>SERIAL</code> e o que sai na resposta é a <code>*_key</code> (UUID). As exceções são o id da parcela e o <code>request_id</code> do pedido PJ, que aparecem nas rotas. Cliente, conta, transação e boleto têm tabela <code>*_status_event</code> (de → para, motivo, quando); a PJ usa <code>corporate_audit</code>, e empréstimo e parcela guardam só o status atual. A tesouraria é uma linha fixa de <code>ACCOUNT</code> (<code>00000000-0000-4000-8000-000000000002</code>), que nenhum cliente acessa.</p>
+<p class="caption">Diagramas 1 a 3: Core. Diagrama 4: banco próprio do Motor de Risco e outbox de notificações (que mora no Core). Todo id interno é <code>SERIAL</code> e o que sai na resposta é a <code>*_key</code> (UUID). As exceções são o id da parcela e o <code>request_id</code> do pedido PJ, que aparecem nas rotas. Cliente, conta, transação e boleto têm tabela <code>*_status_event</code> (de → para, motivo, quando); a PJ usa <code>corporate_audit</code>, e empréstimo e parcela guardam só o status atual. A tesouraria é uma linha fixa de <code>ACCOUNT</code> (<code>00000000-0000-4000-8000-000000000002</code>), que nenhum cliente acessa. O dono dela é um <code>CUSTOMER</code> fixo (o banco), com senha desconhecida e login recusado por regra.</p>
 
 ### Fluxos
 
@@ -393,7 +393,7 @@ pip install -r requirements-dev.txt
 pytest -q tests
 ```
 
-Se outro ambiente injetar plugins no pytest (ROS, por exemplo), rode `unset PYTHONPATH` antes ou use `PYTEST_DISABLE_PLUGIN_AUTOLOAD=1 pytest -q tests`. Se a pasta `tests/integration/sample_entity` ainda existir, acrescente `--ignore=tests/integration/sample_entity`.
+Se outro ambiente injetar plugins no pytest (ROS, por exemplo), rode `unset PYTHONPATH` antes ou use `PYTEST_DISABLE_PLUGIN_AUTOLOAD=1 pytest -q tests`.
 
 **4. Chamar a API na mão**
 

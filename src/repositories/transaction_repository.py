@@ -34,7 +34,7 @@ class TransactionRepository:
         transaction.transaction_key = str(uuid4())
 
         # Toda transação nasce com um estado — nunca sem nenhum, igual
-        # a Sample Entity nasce CREATED. PENDING aqui não gera evento
+        # o cliente nasce CREATED. PENDING aqui não gera evento
         # (não há "de onde" ela veio); o primeiro evento de verdade só
         # aparece quando `update_status` a tirar daqui.
         transaction.status = self.get_status(TransactionStatus.PENDING)
@@ -46,7 +46,7 @@ class TransactionRepository:
         """Muda o estado e deixa o rastro — as duas coisas juntas, sempre.
 
         Quem chama passa o NOME do novo estado (uma string, igual ao
-        `update_status` da Sample Entity), nunca o objeto: é este
+        `update_status` do cliente e da conta), nunca o objeto: é este
         método que busca o `TransactionStatus` certo, monta o evento e
         empilha em `transaction.status_events`. Ninguém fora desta
         classe precisa saber que essa tabela satélite existe.
@@ -109,8 +109,8 @@ class TransactionRepository:
     def list_page(self, limit: int, offset: int, filters: dict) -> list:
         """A página, estreitada por quantos filtros vierem preenchidos.
 
-        Todo filtro segue a mesma forma do `list_page` da Sample
-        Entity: veio vazio, não entra na query; veio preenchido, vira
+        Todo filtro segue a mesma forma do `list_page` das contas:
+        veio vazio, não entra na query; veio preenchido, vira
         mais um `.filter()` — e como todos caem na mesma query, eles se
         somam com E.
 

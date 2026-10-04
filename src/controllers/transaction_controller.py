@@ -53,7 +53,7 @@ class TransactionController(BaseController):
         A ordem aqui não é acidente: tipo de transação e existência das
         contas são perguntas que não dependem de dinheiro nenhum, por
         isso vêm primeiro — igual o CPF é validado antes de qualquer
-        escrita no sample. Débito e crédito só acontecem depois que a
+        escrita no cadastro de cliente. Débito e crédito só acontecem depois que a
         posse da conta de origem já foi confirmada, nunca antes.
 
         A transação nasce PENDING (o `create_transaction` do
