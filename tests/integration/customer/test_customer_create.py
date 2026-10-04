@@ -1,4 +1,6 @@
 from datetime import date
+from uuid import uuid4
+
 from tests.utils import PayloadGenerator, RandomGenerator, RequestGenerator
 from tests.utils.api_helpers import today_br
 
@@ -77,3 +79,28 @@ class TestCustomerCreate:
 
         assert status == 409
         assert response["code"] == "QIT001005"
+
+    def test_replays_customer_creation_with_same_payload(self):
+        """A chave de idempotência do cadastro vem do CPF: repetir é seguro."""
+        payload = PayloadGenerator.create_customer_payload()
+
+        first_status, first_response = RequestGenerator.POST_customer(payload)
+        second_status, second_response = RequestGenerator.POST_customer(payload)
+
+        assert first_status == 201
+        assert second_status == 201
+        assert second_response == first_response
+
+    def test_client_idempotency_header_is_ignored_on_customer(self):
+        """O cliente não escolhe a chave do cadastro: dois CPFs diferentes com a
+        mesma chave de header são dois cadastros, porque a chave é o CPF."""
+        idempotency_key = str(uuid4())
+        first_payload = PayloadGenerator.create_customer_payload()
+        second_payload = PayloadGenerator.create_customer_payload()
+
+        first_status, first = RequestGenerator.POST_customer(first_payload, idempotency_key=idempotency_key)
+        second_status, second = RequestGenerator.POST_customer(second_payload, idempotency_key=idempotency_key)
+
+        assert first_status == 201
+        assert second_status == 201
+        assert first["customer_key"] != second["customer_key"]

@@ -27,6 +27,12 @@ BANKSLIP_API_INTERNAL_TOKEN = os.environ.get("BANKSLIP_API_INTERNAL_TOKEN", "def
 # src/connectors/rest_connector.py.
 BANKSLIP_API_TIMEOUT = int(os.environ.get("BANKSLIP_API_TIMEOUT", "5"))
 
+# O segredo que SÓ o provedor de boletos conhece. Ele manda no header
+# BANKSLIP-WEBHOOK-TOKEN quando avisa que um boleto foi pago. O
+# INTERNAL-TOKEN não basta para isso: todo app cliente também manda ele,
+# e com ele qualquer cliente marcaria o próprio boleto como pago sem pagar.
+BANKSLIP_WEBHOOK_TOKEN = os.environ.get("BANKSLIP_WEBHOOK_TOKEN", "bankslip_webhook_token")
+
 RISK_ENGINE_URL = os.environ.get("RISK_ENGINE_URL", "http://risk_engine:3000")
 RISK_INTERNAL_TOKEN = os.environ.get("RISK_INTERNAL_TOKEN", "risk_default_token")
 RISK_ENGINE_TIMEOUT = int(os.environ.get("RISK_ENGINE_TIMEOUT", "3"))
@@ -45,6 +51,9 @@ INTERNAL_PREFIX = "/internal/"
 # Conta interna do banco (tesouraria): recebe tarifas e parcelas de
 # empréstimo. Criada pelo database/database.sql com esta chave fixa.
 BANK_ACCOUNT_KEY = "00000000-0000-4000-8000-000000000002"
+# O "cliente" dono da tesouraria (o próprio banco). Nunca loga: além da
+# senha desconhecida, o login recusa esta chave explicitamente.
+BANK_CUSTOMER_KEY = "00000000-0000-4000-8000-000000000001"
 
 WEBHOOK_PREFIX = "/webhook/"
 

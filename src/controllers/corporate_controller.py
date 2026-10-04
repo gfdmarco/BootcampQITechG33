@@ -36,14 +36,14 @@ class CorporateController(BaseController):
             
         customer = self.customer_repository.get_by_key(authenticated_customer_key)
         if not customer:
-            raise NotFoundCustomer()
+            raise NotFoundCustomer(authenticated_customer_key)
 
         corp = self.corporate_repository.create(payload)
         self.corporate_repository.add_member(corp, customer, "owner")
         
         self.session.commit()
         
-        return {
+        result = {
             "corporate_key": corp.corporate_key,
             "cnpj": corp.cnpj,
             "company_name": corp.company_name,
@@ -51,6 +51,8 @@ class CorporateController(BaseController):
             "status": "created",
             "created_at": corp.created_at.isoformat() if corp.created_at else None
         }
+        self._log_return("Empresa cadastrada", result)
+        return result
 
     def get_details(self, corporate_key: str, authenticated_customer_key: str) -> dict:
         corp = self.corporate_repository.get_by_key(corporate_key)
@@ -72,7 +74,7 @@ class CorporateController(BaseController):
         for corp_acc in corp.accounts:
             accounts_data.append(corp_acc.account.account_key)
             
-        return {
+        result = {
             "corporate_key": corp.corporate_key,
             "cnpj": corp.cnpj,
             "company_name": corp.company_name,
@@ -81,6 +83,8 @@ class CorporateController(BaseController):
             "members": members_data,
             "accounts": accounts_data
         }
+        self._log_return("Empresa consultada", result)
+        return result
 
     def add_member(self, corporate_key: str, payload: dict, authenticated_customer_key: str) -> dict:
         corp = self.corporate_repository.get_by_key(corporate_key)
@@ -93,7 +97,7 @@ class CorporateController(BaseController):
 
         target_customer = self.customer_repository.get_by_key(payload["customer_key"])
         if not target_customer:
-            raise NotFoundCustomer()
+            raise NotFoundCustomer(payload["customer_key"])
 
         if self.corporate_repository.get_member(corp.id, target_customer.id):
             raise AlreadyCorporateMember()
@@ -101,7 +105,9 @@ class CorporateController(BaseController):
         member = self.corporate_repository.add_member(corp, target_customer, payload["role"])
         self.session.commit()
 
-        return {"customer_key": target_customer.customer_key, "role": member.role}
+        result = {"customer_key": target_customer.customer_key, "role": member.role}
+        self._log_return("Membro adicionado à empresa", result)
+        return result
 
     def remove_member(self, corporate_key: str, target_customer_key: str, authenticated_customer_key: str) -> None:
         corp = self.corporate_repository.get_by_key(corporate_key)
@@ -114,14 +120,17 @@ class CorporateController(BaseController):
 
         target_customer = self.customer_repository.get_by_key(target_customer_key)
         if not target_customer:
-            raise NotFoundCustomer()
+            raise NotFoundCustomer(target_customer_key)
 
         member = self.corporate_repository.get_member(corp.id, target_customer.id)
         if not member:
-            raise NotFoundCustomer() # Or a more specific NotAMember error, but 404 is okay
+            # O cliente existe, mas não é membro desta empresa: 404 do mesmo jeito
+            # (para quem pede, "não há esse membro aqui").
+            raise NotFoundCustomer(target_customer_key)
 
         self.corporate_repository.remove_member(member)
         self.session.commit()
+        self._log_return("Membro removido da empresa")
 
     def create_account(self, corporate_key: str, authenticated_customer_key: str) -> dict:
         corp = self.corporate_repository.get_by_key(corporate_key)
@@ -152,7 +161,9 @@ class CorporateController(BaseController):
         self.corporate_repository.link_account(corp.id, account.id)
         self.session.commit()
         
-        return account_dto
+        result = account_dto
+        self._log_return("Conta PJ aberta", result)
+        return result
 
 
     def request_transfer(self, corporate_key: str, payload: dict, authenticated_customer_key: str) -> dict:
@@ -190,7 +201,9 @@ class CorporateController(BaseController):
         )
         
         self.session.commit()
-        return {"request_id": req.id, "status": req.status}
+        result = {"request_id": req.id, "status": req.status}
+        self._log_return("Transferência PJ solicitada", result)
+        return result
 
     def approve_transfer(self, corporate_key: str, request_id: int, authenticated_customer_key: str) -> dict:
         corp = self.corporate_repository.get_by_key(corporate_key)
@@ -243,5 +256,7 @@ class CorporateController(BaseController):
         )
         
         self.session.commit()
-        return {"request_id": req.id, "status": req.status}
+        result = {"request_id": req.id, "status": req.status}
+        self._log_return("Transferência PJ aprovada", result)
+        return result
 

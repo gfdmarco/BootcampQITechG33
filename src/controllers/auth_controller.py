@@ -1,6 +1,7 @@
 import jwt
 from passlib.hash import bcrypt
 
+from constants import BANK_CUSTOMER_KEY
 from controllers.base_controller import BaseController
 from errors.custom_errors import InvalidCredentials
 from models import CustomerStatus
@@ -33,14 +34,23 @@ class AuthController(BaseController):
         if customer.status.enumerator == CustomerStatus.FAILED:
             raise InvalidCredentials()
 
+        # A tesouraria (cliente "banco") nunca loga — nem com a senha certa.
+        # Segunda trava além da senha desconhecida: se alguém com acesso ao
+        # banco trocar o hash, o login continua fechado. Mesma resposta de
+        # credencial errada, para não revelar que este CPF é especial.
+        if customer.customer_key.strip() == BANK_CUSTOMER_KEY:
+            raise InvalidCredentials()
+
         access_token = create_access_token(customer.customer_key)
         refresh_token = create_refresh_token(customer.customer_key)
 
-        return {
+        result = {
             "access_token": access_token,
             "refresh_token": refresh_token,
             "token_type": "Bearer"
         }
+        self._log_return("Login realizado", result, senha="conferida")
+        return result
 
     def refresh(self, payload: dict) -> dict:
         """Emite um novo Access Token usando um Refresh Token válido."""
@@ -57,7 +67,8 @@ class AuthController(BaseController):
         customer_key = token_data.get("sub")
         customer = self.customer_repository.get_by_key(customer_key)
 
-        if customer is None or customer.status.enumerator == CustomerStatus.FAILED:
+        if (customer is None or customer.status.enumerator == CustomerStatus.FAILED
+                or customer.customer_key.strip() == BANK_CUSTOMER_KEY):
             from errors.custom_errors import UnauthorizedToken
             raise UnauthorizedToken("Customer no longer active.")
 
@@ -65,10 +76,12 @@ class AuthController(BaseController):
 
         # Retornamos apenas um novo access_token. O refresh token continua o mesmo
         # até expirar, forçando um novo login real.
-        return {
+        result = {
             "access_token": new_access_token,
             "token_type": "Bearer"
         }
+        self._log_return("Access token renovado", result)
+        return result
 
     def update_password(self, payload: dict, token_customer_key: str) -> None:
         self.logger.debug(f"Atualizando senha do cliente {token_customer_key}")
@@ -90,4 +103,5 @@ class AuthController(BaseController):
         # Atualizamos a senha com um novo hash bancário
         customer.password_hash = bcrypt.hash(new_password)
         self.session.commit()
+        self._log_return("Senha alterada", None, senha="alterada")
 

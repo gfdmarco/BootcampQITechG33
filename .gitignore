@@ -78,3 +78,7 @@ coverage.xml
 .ruff_cache/
 risk_patch.py
 risk_refactor.py
+
+# Arquivos de patch usados para aplicar mudanças: não vão para o repositório
+*.patch
+*.rej

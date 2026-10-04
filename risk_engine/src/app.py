@@ -41,9 +41,11 @@ def create_app() -> FastAPI:
 
     application.add_api_route("/health_check", lambda: {"status": "ok"}, methods=["GET"])
     application.add_api_route("/evaluate",                        risk_resource.on_post_evaluate,  methods=["POST"])
+    application.add_api_route("/evaluate/{evaluation_key}/confirm", risk_resource.on_post_confirm_evaluation, methods=["POST"])
     application.add_api_route("/risk_profile/{customer_key}",     risk_resource.on_patch_profile,  methods=["PATCH"])
     application.add_api_route("/risk_profile/{customer_key}",     risk_resource.on_get_profile,    methods=["GET"])
     application.add_api_route("/risk_profile",                         risk_resource.on_get_profile_list, methods=["GET"])
+    application.add_api_route("/reconciliation/limit-reservations", risk_resource.on_post_reconcile_reservations, methods=["POST"])
 
     from errors import register_error_handlers
     register_error_handlers(application)

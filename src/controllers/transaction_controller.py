@@ -2,6 +2,7 @@ from controllers.base_controller import BaseController
 from dtos import TransactionDTO
 from connectors.risk_engine_connector import RiskEngineConnector
 from errors import (
+    InvalidIdempotencyKey,
     ForbiddenAction,
     InsufficientBalance,
     InvalidParameter,
@@ -22,6 +23,8 @@ from repositories import (
 from datetime import datetime, timedelta
 from constants import BANK_ACCOUNT_KEY
 from utils.clock import business_now
+from utils.idempotency import lock_idempotency_key
+from uuid import uuid4
 
 
 VALID_TRANSACTION_TYPES = ("deposit", "transfer")
@@ -43,14 +46,14 @@ class TransactionController(BaseController):
         self.customer_repository = CustomerRepository(self.context)
         self.risk_connector = RiskEngineConnector()
 
-    def process_transaction(self, payload: dict, authenticated_customer_key: str) -> dict:
+    def process_transaction(self, payload: dict, authenticated_customer_key: str, idempotency_key: str = None) -> dict:
         """
         Confere quem está pedindo, avalia as regras e só então mexe em saldo.
 
         A ordem aqui não é acidente: tipo de transação e existência das
         contas são perguntas que não dependem de dinheiro nenhum, por
         isso vêm primeiro — igual o CPF é validado antes de qualquer
-        escrita no sample. Débito e crédito só acontecem depois que a
+        escrita no cadastro de cliente. Débito e crédito só acontecem depois que a
         posse da conta de origem já foi confirmada, nunca antes.
 
         A transação nasce PENDING (o `create_transaction` do
@@ -73,7 +76,26 @@ class TransactionController(BaseController):
         
         if caller_customer.status.enumerator == CustomerStatus.FAILED:
             raise ForbiddenAction()
-        
+
+        # ── Idempotência (header Idempotency-Key, gerado pelo cliente) ──
+        # Transferência não tem dado único: duas de R$ 10 para a mesma
+        # conta podem ser legítimas. Só quem chama sabe se é um retry —
+        # por isso a chave vem dele. Chamadas internas (aprovação PJ)
+        # chegam sem chave e seguem o caminho de sempre.
+        if idempotency_key is not None:
+            lock_idempotency_key(self.session, "transaction", idempotency_key)
+
+            existing = self.transaction_repository.get_by_idempotency_key(idempotency_key)
+            if existing is not None:
+                # Mesma chave e mesmo pedido: já fiz — devolvo o resultado
+                # da primeira vez, sem debitar de novo. Mesma chave com
+                # outro pedido (ou de outro cliente): 409.
+                if not self._is_same_transaction(existing, payload, caller_customer.id):
+                    raise InvalidIdempotencyKey()
+                existing_dto = TransactionDTO.only_obj_key(existing)
+                self._log_return("Transação repetida: devolvendo a original", existing_dto)
+                return existing_dto
+
         # Busca pela chave pública — o controller nunca enxerga o `id`.
         destination_account = self.account_repository.get_by_key(destination_account_key)
         if destination_account is None:
@@ -86,6 +108,7 @@ class TransactionController(BaseController):
         origin_account = None
         fee_amount = 0
         fee_obj = None
+        risk_evaluation_key = None
 
         if transaction_type == "deposit":
             # Depósito não tem origem nem tarifa.
@@ -140,10 +163,12 @@ class TransactionController(BaseController):
         # evitar "Ghost Spend" (limite consumido por transação que falhou).
         # Se negar, levanta RiskEngineDenied (403) e o SQLAlchemy faz rollback.
         if payload.get("type") == "transfer":
+            risk_evaluation_key = str(uuid4())
             self.risk_connector.evaluate_transaction(
                 customer_key=authenticated_customer_key,
                 amount=payload.get("amount", 0),
-                transaction_type=payload.get("channel")
+                transaction_type=payload.get("channel"),
+                evaluation_key=risk_evaluation_key,
             )
 
         if fee_amount > 0:
@@ -158,6 +183,7 @@ class TransactionController(BaseController):
             "fee": fee_obj,
             "type": transaction_type,
             "channel": payload["channel"],
+            "idempotency_key": idempotency_key,
         }
 
         transaction = self.transaction_repository.create_transaction(transaction_data)
@@ -173,6 +199,7 @@ class TransactionController(BaseController):
         self.session.flush()
         # Passa pelo DTO antes do commit final.
         transaction_dto = TransactionDTO.only_obj_key(transaction)
+        _transaction_key = transaction.transaction_key.strip()
 
         # Captura valores simples ANTES do commit (objetos expiram depois).
         _sender_key = authenticated_customer_key
@@ -180,17 +207,33 @@ class TransactionController(BaseController):
         _amount = payload["amount"]
         _channel = payload["channel"]
 
+        from controllers.notification_controller import NotificationController
+
+        notifier = NotificationController()
+        if transaction_type == "transfer":
+            notification_event_keys = notifier.enqueue_transfer(
+                _sender_key,
+                _receiver_key,
+                _amount,
+                _channel,
+                transaction_key=_transaction_key,
+            )
+        else:
+            notification_event_keys = notifier.enqueue_deposit(
+                _receiver_key,
+                _amount,
+                _channel,
+                transaction_key=_transaction_key,
+            )
+
         self.session.commit()
+
+        if transaction_type == "transfer" and risk_evaluation_key:
+            self.risk_connector.confirm_evaluation(risk_evaluation_key, _transaction_key)
 
         # Notificacao fire-and-forget: nunca quebra a transferencia.
         try:
-            from controllers.notification_controller import NotificationController
-
-            notifier = NotificationController()
-            if transaction_type == "transfer":
-                notifier.notify_transfer(_sender_key, _receiver_key, _amount, _channel)
-            else:
-                notifier.notify_deposit(_receiver_key, _amount, _channel)
+            notifier.process_event_keys(notification_event_keys)
             notifier.session.commit()
         except Exception:
             self.logger.exception("Falha ao criar notificacao de transacao")
@@ -199,7 +242,29 @@ class TransactionController(BaseController):
             except Exception:
                 pass
 
-        return transaction_dto
+        result = transaction_dto
+        self._log_return("Transação efetivada", result)
+        return result
+
+    def _is_same_transaction(self, existing, payload: dict, caller_customer_id: int) -> bool:
+        """A transação guardada é a mesma que este pedido descreve?"""
+        destination = existing.destination_account
+        origin = existing.origin_account
+        owner_id = origin.customer_id if origin is not None else destination.customer_id
+        def same_key(stored, sent) -> bool:
+            return (stored or "").strip().lower() == (sent or "").strip().lower()
+
+        same_origin = existing.type == "deposit" or same_key(
+            origin.account_key if origin is not None else None, payload.get("origin_account_key")
+        )
+        return (
+            owner_id == caller_customer_id
+            and existing.type == payload.get("type")
+            and existing.channel == payload.get("channel")
+            and existing.amount == payload.get("amount")
+            and same_key(destination.account_key, payload.get("destination_account_key"))
+            and same_origin
+        )
 
     def get_by_key(self, transaction_key: str, authenticated_customer_key: str) -> dict:
         self.logger.debug(f"Buscando a transação de chave {transaction_key}")
@@ -221,7 +286,9 @@ class TransactionController(BaseController):
             raise ForbiddenAction()
 
         # O Controller entrega um dicionário pronto para a Rota.
-        return TransactionDTO.obj_to_dict(transaction)
+        result = TransactionDTO.obj_to_dict(transaction)
+        self._log_return("Transação consultada", result)
+        return result
 
     def get_list(self, limit: int, offset: int, filters: dict, authenticated_customer_key: str) -> dict:
         """A página pedida, depois de conferir se o pedido faz sentido.
@@ -257,10 +324,12 @@ class TransactionController(BaseController):
             is_last_page = False
             transactions_list = transactions_list[:-1]
 
-        return {
+        result = {
             "transactions_list": TransactionDTO.list_obj_to_list_dict(transactions_list),
             "is_last_page": is_last_page,
         }
+        self._log_return("Lista de transações retornada", result)
+        return result
 
     def update_status(self, transaction_key: str, new_status_enumerator: str, reason: str = None) -> dict:
         """Permite que serviços internos mudem o estado (ex.: pending para confirmed)."""
@@ -276,7 +345,9 @@ class TransactionController(BaseController):
         transaction_dto = TransactionDTO.only_obj_key(transaction)
         self.session.commit()
 
-        return transaction_dto
+        result = transaction_dto
+        self._log_return("Status da transação alterado", result)
+        return result
 
     def _check_status_can_change(self, transaction: Transaction, new_status: str) -> None:
         old_status = transaction.status.enumerator
@@ -294,8 +365,10 @@ class TransactionController(BaseController):
         since = business_now() - timedelta(days=days)
         transactions = self.transaction_repository.list_recent_by_customer(customer.id, since, limit)
 
-        return {
+        result = {
             "customer_key": customer_key,
             "days": days,
             "transactions": [TransactionDTO.obj_to_dict(t) for t in transactions],
         }
+        self._log_return("Histórico enviado ao Motor de Risco", result)
+        return result

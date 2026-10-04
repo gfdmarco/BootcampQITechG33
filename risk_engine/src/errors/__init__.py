@@ -21,6 +21,16 @@ class InvalidScoreValue(RiskAPIError):
         super().__init__(422, "RISK003", f"Invalid score value: {value}")
 
 
+class InvalidIdempotencyKey(RiskAPIError):
+    def __init__(self):
+        super().__init__(409, "RISK004", "Evaluation key was already used with a different payload")
+
+
+class EvaluationNotFound(RiskAPIError):
+    def __init__(self, evaluation_key: str):
+        super().__init__(404, "RISK005", f"Risk evaluation not found for {evaluation_key}")
+
+
 def register_error_handlers(application: FastAPI) -> None:
     @application.exception_handler(RiskAPIError)
     async def handle_risk_api_error(request: Request, exception: RiskAPIError) -> JSONResponse:
@@ -28,4 +38,3 @@ def register_error_handlers(application: FastAPI) -> None:
             status_code=exception.status_code,
             content={"error_code": exception.error_code, "message": exception.message}
         )
-

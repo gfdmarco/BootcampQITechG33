@@ -7,6 +7,7 @@ class Notification(Base):
 
     id = Column(Integer, primary_key=True)
     key = Column(CHAR(36), nullable=False)
+    event_key = Column(String(120), nullable=False)
     customer_key = Column(CHAR(36), nullable=False)
     title = Column(String(100), nullable=False)
     body = Column(Text, nullable=False)
@@ -15,4 +16,5 @@ class Notification(Base):
 
     __table_args__ = (
         UniqueConstraint("key"),
+        UniqueConstraint("event_key"),
     )

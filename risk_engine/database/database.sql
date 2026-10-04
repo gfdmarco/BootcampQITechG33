@@ -30,6 +30,45 @@ CREATE TABLE risk_evaluation_event (
     created_at          TIMESTAMP NOT NULL DEFAULT NOW()
 );
 
+-- Requisicoes de avaliacao em tempo real.
+-- A evaluation_key torna POST /evaluate idempotente: se o Core repetir a
+-- mesma tentativa por timeout, o Risk devolve a mesma decisao sem consumir
+-- limite diario de novo.
+CREATE TABLE risk_evaluation_request (
+    id                  SERIAL PRIMARY KEY,
+    evaluation_key      CHAR(36) NOT NULL,
+    customer_key        CHAR(36) NOT NULL,
+    transaction_type    VARCHAR(30) NOT NULL,
+    amount              BIGINT NOT NULL,
+    score               VARCHAR(20) NOT NULL,
+    decision            VARCHAR(20) NOT NULL,
+    reason              TEXT,
+    status              VARCHAR(20) NOT NULL DEFAULT 'completed',
+    transaction_key     CHAR(36),
+    created_at          TIMESTAMP NOT NULL DEFAULT NOW(),
+    updated_at          TIMESTAMP NOT NULL DEFAULT NOW(),
+    UNIQUE(evaluation_key)
+);
+
+-- Consumo persistente de limite.
+-- Redis pode acelerar leitura, mas esta tabela e a trilha reconstruivel.
+CREATE TABLE risk_limit_consumption (
+    id                  SERIAL PRIMARY KEY,
+    consumption_key     CHAR(36) NOT NULL,
+    evaluation_key      CHAR(36) NOT NULL REFERENCES risk_evaluation_request(evaluation_key),
+    customer_key        CHAR(36) NOT NULL,
+    transaction_key     CHAR(36),
+    transaction_type    VARCHAR(30) NOT NULL,
+    amount              BIGINT NOT NULL,
+    status              VARCHAR(20) NOT NULL DEFAULT 'reserved',
+    requested_at        TIMESTAMP NOT NULL DEFAULT NOW(),
+    confirmed_at        TIMESTAMP,
+    canceled_at         TIMESTAMP,
+    expired_at          TIMESTAMP,
+    UNIQUE(consumption_key),
+    UNIQUE(evaluation_key)
+);
+
 -- Políticas de limite por score de risco
 CREATE TABLE risk_limit_policy (
     id                      SERIAL PRIMARY KEY,

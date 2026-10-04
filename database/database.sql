@@ -30,6 +30,17 @@ CREATE TABLE customer_status_event (
     created_at      TIMESTAMP NOT NULL DEFAULT NOW()
 );
 
+CREATE TABLE customer_idempotency_request (
+    id               SERIAL PRIMARY KEY,
+    idempotency_key  VARCHAR(120) NOT NULL,
+    customer_id      INTEGER NOT NULL REFERENCES customer(id),
+    request_hash     CHAR(64) NOT NULL,
+    response_status  INTEGER NOT NULL,
+    response_body    JSONB NOT NULL,
+    created_at       TIMESTAMP NOT NULL DEFAULT NOW(),
+    UNIQUE(idempotency_key)
+);
+
 CREATE TABLE account_status (
     id          SERIAL PRIMARY KEY,
     enumerator  VARCHAR(50) NOT NULL,
@@ -49,7 +60,8 @@ CREATE TABLE account (
     status_id   INTEGER NOT NULL REFERENCES account_status(id),
     created_at  TIMESTAMP NOT NULL DEFAULT NOW(),
     updated_at  TIMESTAMP NOT NULL DEFAULT NOW(),
-    UNIQUE(account_key), UNIQUE(branch, number),
+    idempotency_key VARCHAR(120),
+    UNIQUE(account_key), UNIQUE(branch, number), UNIQUE(idempotency_key),
     CHECK (balance >= 0)
 );
 
@@ -92,7 +104,8 @@ CREATE TABLE transaction (
     status_id               INTEGER NOT NULL REFERENCES transaction_status(id),
     created_at              TIMESTAMP NOT NULL DEFAULT NOW(),
     updated_at              TIMESTAMP NOT NULL DEFAULT NOW(),
-    UNIQUE(transaction_key),
+    idempotency_key         VARCHAR(120),
+    UNIQUE(transaction_key), UNIQUE(idempotency_key),
     CHECK (type <> 'transfer' OR origin_account_id IS NOT NULL)
 );
 
@@ -208,7 +221,8 @@ CREATE TABLE loan (
     interest_rate       INTEGER NOT NULL,
     status              VARCHAR(20) NOT NULL DEFAULT 'active',
     created_at          TIMESTAMP NOT NULL DEFAULT NOW(),
-    UNIQUE(loan_key)
+    idempotency_key     VARCHAR(120),
+    UNIQUE(loan_key), UNIQUE(idempotency_key)
 );
 
 CREATE TABLE loan_installment (
@@ -228,12 +242,27 @@ CREATE TABLE loan_installment (
 CREATE TABLE notification (
     id           SERIAL PRIMARY KEY,
     key          CHAR(36)      NOT NULL,
+    event_key    VARCHAR(120)  NOT NULL,
     customer_key CHAR(36)      NOT NULL,
     title        VARCHAR(100)  NOT NULL,
     body         TEXT          NOT NULL,
     is_read      BOOLEAN       NOT NULL DEFAULT FALSE,
     created_at   TIMESTAMP     NOT NULL DEFAULT NOW(),
-    UNIQUE(key)
+    UNIQUE(key), UNIQUE(event_key)
+);
+
+CREATE TABLE notification_outbox (
+    id           SERIAL PRIMARY KEY,
+    event_key    VARCHAR(120)  NOT NULL,
+    customer_key CHAR(36)      NOT NULL,
+    title        VARCHAR(100)  NOT NULL,
+    body         TEXT          NOT NULL,
+    status       VARCHAR(20)   NOT NULL DEFAULT 'pending',
+    attempts     INTEGER       NOT NULL DEFAULT 0,
+    last_error   TEXT,
+    created_at   TIMESTAMP     NOT NULL DEFAULT NOW(),
+    processed_at TIMESTAMP,
+    UNIQUE(event_key)
 );
 
 -- ============================================

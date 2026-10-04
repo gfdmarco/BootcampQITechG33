@@ -13,12 +13,21 @@ class RiskResource:
 
     async def on_post_evaluate(self, request: Request) -> JSONResponse:
         payload          = await request.json()
+        evaluation_key   = payload.get("evaluation_key")
         customer_key     = payload.get("customer_key")
         amount           = int(payload.get("amount", 0))
         transaction_type = payload.get("transaction_type", "transfer")
 
         controller = RiskController(request.state.context)
-        result     = controller.evaluate(customer_key, amount, transaction_type)
+        result     = controller.evaluate(customer_key, amount, transaction_type, evaluation_key)
+        return JSONResponse(status_code=200, content=result)
+
+    async def on_post_confirm_evaluation(self, evaluation_key: str, request: Request) -> JSONResponse:
+        payload = await request.json()
+        transaction_key = payload.get("transaction_key")
+
+        controller = RiskController(request.state.context)
+        result = controller.confirm_evaluation(evaluation_key, transaction_key)
         return JSONResponse(status_code=200, content=result)
 
     async def on_patch_profile(self, customer_key: str, request: Request) -> JSONResponse:
@@ -40,3 +49,11 @@ class RiskResource:
         controller = RiskController(request.state.context)
         profiles   = controller.list_profiles()
         return JSONResponse(status_code=200, content={"profiles": profiles})
+
+    async def on_post_reconcile_reservations(self, request: Request) -> JSONResponse:
+        payload = await request.json()
+        max_age_minutes = int(payload.get("max_age_minutes", 15))
+
+        controller = RiskController(request.state.context)
+        result = controller.reconcile_stale_reservations(max_age_minutes)
+        return JSONResponse(status_code=200, content=result)

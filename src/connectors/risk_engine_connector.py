@@ -46,16 +46,18 @@ class RiskEngineConnector(RestConnector):
             logger.error(f"Erro ao consultar Risk Engine para {customer_key}: {e}. Fallback para 'unknown'.")
             return "unknown"
 
-    def evaluate_transaction(self, customer_key: str, amount: int, transaction_type: str) -> None:
+    def evaluate_transaction(self, customer_key: str, amount: int, transaction_type: str, evaluation_key: str) -> None:
         """
         Avalia a transação no Risk Engine (POST /evaluate).
 
         Se o motor responder DENY, lança RiskEngineDenied (403).
-        Se houver falha de rede (timeout/indisponibilidade/403 do token), entra em
-        Degraded Mode: transações acima de R$ 1000 são bloqueadas por segurança.
+        Se houver falha de rede, timeout, indisponibilidade ou resposta inesperada,
+        tambem nega. Para dinheiro, Risk indisponivel nao pode virar aprovacao por
+        suposicao.
         """
         try:
             payload = {
+                "evaluation_key": evaluation_key,
                 "customer_key": customer_key,
                 "amount": amount,
                 "transaction_type": transaction_type,
@@ -63,23 +65,53 @@ class RiskEngineConnector(RestConnector):
             headers = {
                 "INTERNAL-TOKEN": os.getenv("RISK_INTERNAL_TOKEN", "risk_default_token")
             }
-            response = requests.post(f"{RISK_ENGINE_URL}/evaluate", json=payload, headers=headers, timeout=2)
+            response = requests.post(
+                f"{RISK_ENGINE_URL}/evaluate",
+                json=payload,
+                headers=headers,
+                timeout=RISK_ENGINE_TIMEOUT,
+            )
 
             if response.status_code == 200:
                 data = response.json()
                 if data.get("action") == "DENY":
                     raise RiskEngineDenied(data.get("reason", "Denied by Risk Engine Policy"))
-            elif response.status_code == 403:
-                logger.error("Risk Engine retornou 403 Forbidden. Verifique o RISK_INTERNAL_TOKEN.")
-                # Falha de autenticação com o motor: trata como indisponibilidade (Degraded Mode)
-                raise requests.exceptions.RequestException("Risk Engine Authentication Failed")
+
+                if data.get("action") == "APPROVE":
+                    return
+
+                raise RiskEngineDenied("Risk Engine returned an invalid decision.")
+
+            logger.error("Risk Engine retornou status inesperado %s: %s", response.status_code, response.text)
+            raise RiskEngineDenied("Risk Engine unavailable or returned an unexpected response.")
 
         except requests.exceptions.RequestException as e:
-            logger.warning(
-                f"Risk Engine indisponível ou lento: {e}. "
-                "Transação prosseguindo em Degraded Mode (limite de R$ 1000)."
+            logger.warning("Risk Engine indisponível ou lento: %s. Transação negada por segurança.", e)
+            raise RiskEngineDenied("Risk Engine unavailable or timed out.")
+
+    def confirm_evaluation(self, evaluation_key: str, transaction_key: str) -> None:
+        """Confirma no Risk Engine que a transferência comitou no Core.
+
+        A confirmação não participa do commit financeiro. Se falhar, o
+        Risk ainda mantém a avaliação como reserved, e uma reconciliação
+        futura pode resolver. O Core não desfaz dinheiro por falha nesta
+        chamada pós-commit.
+        """
+        try:
+            headers = {
+                "INTERNAL-TOKEN": os.getenv("RISK_INTERNAL_TOKEN", "risk_default_token")
+            }
+            response = requests.post(
+                f"{RISK_ENGINE_URL}/evaluate/{evaluation_key}/confirm",
+                json={"transaction_key": transaction_key},
+                headers=headers,
+                timeout=2,
             )
-            # Em vez de liberar qualquer valor (Fail-Open), aplica um limite restrito.
-            DEGRADED_MODE_LIMIT = 100000  # R$ 1000 em centavos
-            if amount > DEGRADED_MODE_LIMIT:
-                raise RiskEngineDenied("Transação negada pois excede o limite restrito do modo de segurança.")
+            if response.status_code not in (200, 404):
+                logger.warning(
+                    "Risk Engine retornou %s ao confirmar avaliação %s",
+                    response.status_code,
+                    evaluation_key,
+                )
+        except requests.exceptions.RequestException as e:
+            logger.warning("Falha ao confirmar avaliação de risco %s: %s", evaluation_key, e)

@@ -14,9 +14,11 @@ class Loan(Base):
     interest_rate = Column(Integer, nullable=False)
     status = Column(String(20), nullable=False, default="active")
     created_at = Column(DateTime, nullable=False, server_default=func.now())
+    idempotency_key = Column(String(120), nullable=True)   # header Idempotency-Key do POST /loans
 
     __table_args__ = (
         UniqueConstraint("loan_key"),
+        UniqueConstraint("idempotency_key"),
     )
 
     account = relationship("Account", foreign_keys=[account_id], lazy="selectin")

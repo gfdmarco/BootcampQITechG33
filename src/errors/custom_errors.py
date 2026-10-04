@@ -5,28 +5,6 @@ from errors import QIException
 # QIT001xxx — Domínio de Negócio (Cadastro, Regras de Cliente e Conta)
 # ──────────────────────────────────────────────────────────────────────────────
 
-class NotFoundSampleEntity(QIException):
-    code = "QIT001001"
-
-    def __init__(self, sample_entity_key) -> None:
-        title = "Entity not Found"
-        http_status = 404
-        description = f"Entity with key {sample_entity_key} was not found."
-        translation = f"A entidade com chave {sample_entity_key} não foi encontrada."
-        super().__init__(title, self.code, http_status, description, translation)
-
-
-class SampleEntityFinalStatus(QIException):
-    code = "QIT001002"
-
-    def __init__(self, old_status, new_status) -> None:
-        title = "Entity cannot change status"
-        http_status = 409
-        description = f"Entity with status {old_status} cannot update to {new_status}."
-        translation = "Essa entidade não pode ser atualizada."
-        super().__init__(title, self.code, http_status, description, translation)
-
-
 class InvalidDocumentNumber(QIException):
     """O CPF tem o formato certo e não existe.
 
@@ -50,8 +28,8 @@ class DuplicatedDocumentNumber(QIException):
     """Já existe um cadastro com este CPF.
 
     409 Conflict: o pedido está correto em si, e o que impede é o que já
-    está no banco. É a mesma família do SampleEntityFinalStatus aqui em
-    cima — conflito com o que já existe, não erro de quem pediu.
+    está no banco. É a mesma família do DuplicatedEmail e do
+    TransactionFinalStatus — conflito com o que já existe, não erro de quem pediu.
     """
 
     code = "QIT001004"
@@ -72,17 +50,6 @@ class DuplicatedEmail(QIException):
         http_status = 409
         description = f"There is already an entity with the email {email}."
         translation = "Já existe um cadastro com este e-mail."
-        super().__init__(title, self.code, http_status, description, translation)
-
-
-class UnderageSampleEntity(QIException):
-    code = "QIT001006"
-
-    def __init__(self, age, minimum_age) -> None:
-        title = "Entity is underage"
-        http_status = 422
-        description = f"The entity is {age} years old, and the minimum is {minimum_age}."
-        translation = f"É preciso ter pelo menos {minimum_age} anos."
         super().__init__(title, self.code, http_status, description, translation)
 
 
@@ -124,6 +91,32 @@ class InvalidBirthdate(QIException):
         http_status = 422
         description = f"The birthdate {birthdate} is not a real birthdate."
         translation = "A data de nascimento informada não existe."
+        super().__init__(title, self.code, http_status, description, translation)
+
+class InvalidIdempotencyKey(QIException):
+    code = "QIT001027"
+
+    def __init__(self) -> None:
+        title = "Invalid Idempotency Key"
+        http_status = 409
+        description = "The Idempotency-Key was already used with a different payload."
+        translation = "A chave de idempotência já foi usada com outro corpo de requisição."
+        super().__init__(title, self.code, http_status, description, translation)
+
+class MissingIdempotencyKey(QIException):
+    """O pedido que move dinheiro ou cria recurso chegou sem a chave.
+
+    Em POST /transactions e POST /customers/{key}/accounts o header
+    Idempotency-Key é obrigatório e precisa ser um UUID: é ele que deixa
+    o cliente repetir o pedido depois de um timeout sem medo de duplicar.
+    """
+    code = "QIT001028"
+
+    def __init__(self) -> None:
+        title = "Missing Idempotency Key"
+        http_status = 400
+        description = "The Idempotency-Key header is required and must be a UUID."
+        translation = "O cabeçalho Idempotency-Key é obrigatório e precisa ser um UUID."
         super().__init__(title, self.code, http_status, description, translation)
 
 class DuplicatedAccount(QIException):
@@ -307,7 +300,7 @@ class InvalidExpirationDate(QIException):
         super().__init__(title, self.code, http_status, description, translation)
 
 class BankSlipNotPayable(QIException):
-    code = "QIT001026"          # ← o próximo livre na sua numeração
+    code = "QIT001026"
 
     def __init__(self, bank_slip_key, current_status) -> None:
         title = "Bank Slip Not Payable"

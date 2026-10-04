@@ -2,7 +2,7 @@ from datetime import date
 from uuid import uuid4
 
 from database import Context
-from models import Customer, CustomerStatus, CustomerStatusEvent
+from models import Customer, CustomerIdempotencyRequest, CustomerStatus, CustomerStatusEvent
 
 
 class CustomerRepository:
@@ -54,6 +54,38 @@ class CustomerRepository:
 
     def get_status(self, enumerator: str) -> CustomerStatus:
         return self.session.query(CustomerStatus).filter(CustomerStatus.enumerator == enumerator).one()
+
+    def get_idempotency_request(self, idempotency_key: str) -> CustomerIdempotencyRequest:
+        return (
+            self.session.query(CustomerIdempotencyRequest)
+            .filter(CustomerIdempotencyRequest.idempotency_key == idempotency_key)
+            .first()
+        )
+
+    def create_idempotency_request(
+        self,
+        idempotency_key: str,
+        customer_id: int,
+        request_hash: str,
+        response_status: int,
+        response_body: dict,
+    ) -> CustomerIdempotencyRequest:
+        request = CustomerIdempotencyRequest()
+        request.idempotency_key = idempotency_key
+        request.customer_id = customer_id
+        request.request_hash = request_hash
+        request.response_status = response_status
+        request.response_body = response_body
+
+        self.session.add(request)
+        return request
+
+    def delete_idempotency_requests_before(self, cutoff) -> int:
+        return (
+            self.session.query(CustomerIdempotencyRequest)
+            .filter(CustomerIdempotencyRequest.created_at < cutoff)
+            .delete(synchronize_session=False)
+        )
 
     def list_page(self, limit: int, offset: int, filters: dict) -> list[Customer]:
         query = self.session.query(Customer)

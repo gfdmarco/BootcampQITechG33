@@ -1,8 +1,77 @@
+import os
+
+from sqlalchemy import create_engine, text
+
 from tests.utils.api_helpers import call, deposit, new_customer, open_account, transfer
 
 
 def _notifications(token):
     return call("GET", "/notifications", token)
+
+
+def _database_url() -> str:
+    db_port = os.environ.get("DB_PORT") or _env_file_value("DB_PORT") or "5432"
+    return os.environ.get(
+        "DATABASE_URL",
+        f"postgresql+psycopg2://bootcamp:bootcamp@127.0.0.1:{db_port}/bootcamp",
+    ).replace("@localhost:", "@127.0.0.1:")
+
+
+def _env_file_value(name: str) -> str | None:
+    try:
+        with open(".env", "r", encoding="utf-8") as env_file:
+            for line in env_file:
+                if line.startswith(f"{name}="):
+                    return line.strip().split("=", 1)[1]
+    except FileNotFoundError:
+        return None
+    return None
+
+
+def _notification_event_keys(transaction_key: str) -> list[str]:
+    engine = create_engine(_database_url())
+    connection = engine.connect()
+    try:
+        return [
+            row[0]
+            for row in connection.execute(
+                text(
+                    """
+                    SELECT event_key
+                      FROM notification
+                     WHERE event_key LIKE :event_key_prefix
+                     ORDER BY event_key
+                    """
+                ),
+                {"event_key_prefix": f"transaction:{transaction_key}:%"},
+            ).all()
+        ]
+    finally:
+        connection.close()
+        engine.dispose()
+
+
+def _notification_outbox_statuses(transaction_key: str) -> list[str]:
+    engine = create_engine(_database_url())
+    connection = engine.connect()
+    try:
+        return [
+            row[0]
+            for row in connection.execute(
+                text(
+                    """
+                    SELECT status
+                      FROM notification_outbox
+                     WHERE event_key LIKE :event_key_prefix
+                     ORDER BY event_key
+                    """
+                ),
+                {"event_key_prefix": f"transaction:{transaction_key}:%"},
+            ).all()
+        ]
+    finally:
+        connection.close()
+        engine.dispose()
 
 
 class TestNotificationOnTransfer:
@@ -22,6 +91,23 @@ class TestNotificationOnTransfer:
         # Alice recebe 1 pelo proprio deposito + 1 pelo envio da transferencia
         assert body["total"] == 2
         assert body["unread_count"] == 2
+
+    def test_transfer_notifications_have_unique_event_keys(self):
+        alice_key, alice_token, _ = new_customer()
+        alice_acc = open_account(alice_key, alice_token)
+        bob_key, bob_token, _ = new_customer()
+        bob_acc = open_account(bob_key, bob_token)
+        deposit(alice_acc, 1000, alice_token)
+
+        status, transfer_body = transfer(alice_acc, bob_acc, 100, alice_token)
+        assert status == 201
+
+        event_keys = _notification_event_keys(transfer_body["transaction_key"])
+        assert event_keys == [
+            f"transaction:{transfer_body['transaction_key']}:receiver",
+            f"transaction:{transfer_body['transaction_key']}:sender",
+        ]
+        assert _notification_outbox_statuses(transfer_body["transaction_key"]) == ["processed", "processed"]
 
     def test_transfer_creates_notification_for_receiver(self):
         """Apos transferencia, destinatario tem 1 notificacao."""

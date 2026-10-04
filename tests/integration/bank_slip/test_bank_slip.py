@@ -1,3 +1,4 @@
+import os
 import requests 
 from tests.utils.api_helpers import balance, deposit, new_customer, open_account, transfer, call, today_br
 from datetime import date, timedelta
@@ -25,9 +26,18 @@ def issue(account_key: str, access_token: str, amount, expiration_date=None):
         payload=payload,
     )
 
-def pay(bank_slip_key, internal_token=True):
-    """Simula o serviço de boletos avisando que o boleto foi pago."""
-    return call("POST", f"/webhook/bank_slips/{bank_slip_key}/paid", internal_token=internal_token)
+WEBHOOK_TOKEN = os.environ.get("BANKSLIP_WEBHOOK_TOKEN", "bankslip_webhook_token")
+
+
+def pay(bank_slip_key, internal_token=True, webhook_token=WEBHOOK_TOKEN):
+    """Simula o serviço de boletos avisando que o boleto foi pago.
+
+    O provedor manda o segredo dele no BANKSLIP-WEBHOOK-TOKEN; um app
+    cliente não tem esse segredo (passe webhook_token=None para simular).
+    """
+    headers = {"BANKSLIP-WEBHOOK-TOKEN": webhook_token} if webhook_token else {}
+    return call("POST", f"/webhook/bank_slips/{bank_slip_key}/paid",
+                internal_token=internal_token, headers=headers)
 
 def test_mock_is_up():
     assert requests.get("http://localhost:8080/health_check", timeout=2).status_code == 204
